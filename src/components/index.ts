@@ -1,0 +1,11 @@
+export { Nav } from "./nav";
+export { Hero } from "./hero";
+export { About } from "./about";
+export { Projects } from "./projects";
+export { Contact } from "./contact";
+export { Footer } from "./footer";
+export { ScrollProgress } from "./scroll-progress";
+export { CursorGlow } from "./cursor-glow";
+export { ScrollReveal } from "./scroll-reveal";
+export { BackToTop } from "./back-to-top";
+export { PageTransition } from "./page-transition";
