@@ -42,7 +42,7 @@ export function Hero() {
         <ScrollReveal delay={200}>
           <div className="max-w-lg space-y-6">
             <p className="text-lg text-neutral-400 leading-relaxed font-light">
-              Building products from zero. Full-stack developer.
+              Ex-Oracle. Patent filed. $140K grant recipient. Codeforces Candidate Master (1950). Building at the intersection of distributed systems and product.
             </p>
           </div>
         </ScrollReveal>

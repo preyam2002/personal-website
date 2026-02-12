@@ -16,24 +16,24 @@ interface Project {
 const projects: Project[] = [
   {
     name: "Lumora Social",
-    description: "Decentralized social platform on Sui blockchain.",
-    href: "https://github.com/preyamrao",
-    tech: ["Sui", "React", "Rust"],
-    year: "2024",
+    description: "Web3 social platform with 32K users. $140K Sui Foundation grant. End-to-end encrypted messaging.",
+    href: "https://github.com/preyam2002",
+    tech: ["TypeScript", "Node.js", "Sui", "WebSockets"],
+    year: "2024-2025",
   },
   {
     name: "Aletheia",
-    description: "AI-powered research tool for fact verification.",
-    href: "https://github.com/preyamrao",
-    tech: ["Python", "FastAPI", "OpenAI"],
-    year: "2024",
+    description: "Decentralized prediction market with LMSR pricing. Multi-oracle consensus with AI verification.",
+    href: "https://github.com/preyam2002",
+    tech: ["Move", "Next.js", "OpenAI", "AWS"],
+    year: "2025",
   },
   {
-    name: "Competitive Programming",
-    description: "Candidate Master. 2000+ problems solved.",
-    href: "https://codeforces.com/profile/preyamrao",
-    tech: ["C++", "Algorithms"],
-    year: "2020-Present",
+    name: "Vault Replication",
+    description: "Cross-region disaster recovery service. Patent filed. Handles 1000+ secrets per customer.",
+    href: "https://github.com/preyam2002",
+    tech: ["Java", "Micronaut", "OCI Vault", "Kubernetes"],
+    year: "2024",
   },
 ];
 
@@ -124,7 +124,7 @@ export function Projects() {
       <ScrollReveal delay={400}>
         <div className="mt-16 text-center">
           <Link
-            href="https://github.com/preyamrao"
+            href="https://github.com/preyam2002"
             target="_blank"
             rel="noopener noreferrer"
             className="group inline-flex items-center gap-3 text-neutral-500 hover:text-neutral-300 transition-colors font-[family-name:var(--font-mono)] text-sm"

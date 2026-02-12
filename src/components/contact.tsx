@@ -5,9 +5,9 @@ import { ScrollReveal } from "./scroll-reveal";
 import { Mail, Github, Linkedin, Twitter, ArrowUpRight } from "lucide-react";
 
 const socials = [
-  { name: "GitHub", href: "https://github.com/preyamrao", icon: Github },
-  { name: "LinkedIn", href: "https://linkedin.com/in/preyamrao", icon: Linkedin },
-  { name: "Twitter", href: "https://twitter.com/preyamrao", icon: Twitter },
+  { name: "GitHub", href: "https://github.com/preyam2002", icon: Github },
+  { name: "LinkedIn", href: "https://linkedin.com/in/preyam", icon: Linkedin },
+  { name: "Twitter", href: "https://twitter.com/preyam2002", icon: Twitter },
 ];
 
 export function Contact() {

@@ -3,9 +3,9 @@
 import { ScrollReveal } from "./scroll-reveal";
 
 const stats = [
-  { value: "2k+", label: "Problems" },
-  { value: "3+", label: "Years" },
-  { value: "10+", label: "Projects" },
+  { value: "100K+", label: "Integrations" },
+  { value: "32K+", label: "Users" },
+  { value: "97%", label: "Latency Cut" },
 ];
 
 export function About() {
@@ -58,16 +58,42 @@ export function About() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {["TypeScript", "React", "Node.js", "Python", "Rust"].map(
-                (skill) => (
-                  <span
-                    key={skill}
-                    className="tag"
+              {[
+                "Java",
+                "TypeScript",
+                "Node.js",
+                "Kubernetes",
+                "PostgreSQL",
+                "Redis",
+                "AWS",
+                "Docker",
+              ].map((skill) => (
+                <span key={skill} className="tag">
+                  {skill}
+                </span>
+              ))}
+            </div>
+
+            <div className="pt-8 border-t border-neutral-800">
+              <h3 className="font-[family-name:var(--font-mono)] text-xs text-neutral-500 tracking-wider uppercase mb-4">
+                Achievements
+              </h3>
+              <div className="space-y-3">
+                {[
+                  { title: "$140K Sui Foundation Grant", year: "2025" },
+                  { title: "Patent Filed - Vault Replication", year: "2024" },
+                  { title: "Smart India Hackathon - Top 5", year: "2022" },
+                  { title: "Codeforces Candidate Master (1950)", year: "2022" },
+                ].map((achievement) => (
+                  <div
+                    key={achievement.title}
+                    className="flex items-center justify-between"
                   >
-                    {skill}
-                  </span>
-                )
-              )}
+                    <span className="text-sm text-neutral-400">{achievement.title}</span>
+                    <span className="font-[family-name:var(--font-mono)] text-xs text-neutral-600">{achievement.year}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </ScrollReveal>

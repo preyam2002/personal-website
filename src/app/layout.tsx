@@ -17,32 +17,36 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Preyam Rao - Software Engineer",
+  title: "Preyam Rao | Backend Engineer",
   description:
-    "Software Engineer building products and solving problems. Ex-Oracle, IIT Kharagpur '23, Candidate Master @ Codeforces.",
+    "Backend Engineer at Lumora Social. Ex-Oracle. Patent filed. $140K grant recipient. Building distributed systems at scale.",
   keywords: [
     "software engineer",
-    "developer",
-    "portfolio",
+    "backend engineer",
+    "distributed systems",
     "preyam rao",
     "oracle",
     "iit kharagpur",
-    "competitive programming",
+    "kubernetes",
+    "microservices",
+    "postgresql",
+    "java",
+    "typescript",
   ],
   authors: [{ name: "Preyam Rao" }],
   creator: "Preyam Rao",
   openGraph: {
-    title: "Preyam Rao - Software Engineer",
-    description: "Software Engineer building products and solving problems.",
+    title: "Preyam Rao | Backend Engineer",
+    description: "Backend Engineer. Ex-Oracle. Patent filed. $140K grant recipient.",
     type: "website",
     locale: "en_US",
     siteName: "Preyam Rao",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Preyam Rao - Software Engineer",
-    description: "Software Engineer building products and solving problems.",
-    creator: "@preyamrao",
+    title: "Preyam Rao | Backend Engineer",
+    description: "Backend Engineer. Ex-Oracle. Patent filed.",
+    creator: "@preyam2002",
   },
   robots: {
     index: true,
