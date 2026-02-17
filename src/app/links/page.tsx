@@ -1,10 +1,7 @@
-import { Nav } from "@/components/nav";
-import { Footer } from "@/components/footer";
-import { ScrollProgress } from "@/components/scroll-progress";
-import { PageTransition } from "@/components/page-transition";
-import { BackToTop } from "@/components/back-to-top";
+"use client";
+
+import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowUpRight, ArrowLeft } from "lucide-react";
 
 interface LinkItem {
   title: string;
@@ -57,78 +54,89 @@ const linkCategories: LinkCategory[] = [
 
 export default function LinksPage() {
   return (
-    <>
-      <PageTransition />
-      <ScrollProgress />
-      <Nav />
-      <main className="flex-1 px-6 md:px-12 lg:px-20 max-w-6xl mx-auto w-full relative pt-32 pb-24">
-        {/* Header */}
-        <div className="mb-20">
+    <div className="bg-white dark:bg-black text-zinc-900 dark:text-zinc-50 min-h-screen selection:bg-zinc-100 dark:selection:bg-zinc-800">
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 transition-colors">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Link 
-            href="/" 
-            className="group inline-flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-300 mb-12 transition-colors font-[family-name:var(--font-mono)]"
+            href="/"
+            className="group flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors"
           >
-            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-            Back
+            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Home
           </Link>
-
-          <div className="flex items-center gap-6 mb-8">
-            <span className="font-[family-name:var(--font-mono)] text-xs text-purple-500 tracking-wider">
-              /
-            </span>
-            <div className="h-px flex-1 bg-gradient-to-r from-neutral-800 to-transparent" />
-          </div>
-
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-light text-white mb-6">
-            <span className="text-gradient">Links</span>
-          </h1>
-          <p className="text-lg text-neutral-400 max-w-md">
-            Curated bookmarks and resources.
-          </p>
         </div>
+      </header>
 
-        {/* Links grid */}
-        <div className="space-y-20">
-          {linkCategories.map((category, i) => (
-            <section key={i}>
-              <h2 className="text-xs font-[family-name:var(--font-mono)] text-neutral-500 tracking-widest uppercase mb-8">
-                {category.name}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {category.links.map((link, j) => (
-                  <a
-                    key={j}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-start justify-between p-5 rounded-xl bg-neutral-900/30 border border-neutral-800/50 hover:border-neutral-700 hover:bg-neutral-900/50 transition-all duration-300"
-                  >
-                    <div>
-                      <h3 className="text-neutral-300 font-medium mb-1 group-hover:text-purple-300 transition-colors">
-                        {link.title}
-                      </h3>
-                      <p className="text-sm text-neutral-500">
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 pt-32 md:pt-48 pb-20">
+        <div className="max-w-4xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="mb-24"
+          >
+            <span className="text-xs font-mono text-zinc-400 block mb-6 uppercase tracking-widest">Links</span>
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-light tracking-tight leading-[0.9] mb-8 text-zinc-900 dark:text-zinc-50">
+              Curated<br/><span className="text-zinc-400 dark:text-zinc-600">Resources</span>
+            </h1>
+            <p className="text-xl text-zinc-600 dark:text-zinc-400 font-light max-w-xl leading-relaxed">
+              A collection of tools, readings, and inspiration that I frequently revisit.
+            </p>
+          </motion.div>
+
+          <div className="space-y-24">
+            {linkCategories.map((category, i) => (
+              <motion.section 
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ delay: i * 0.1 }}
+              >
+                <h2 className="text-sm font-mono text-zinc-400 uppercase mb-8 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                  {category.name}
+                </h2>
+                <div className="grid md:grid-cols-2 gap-x-12 gap-y-8">
+                  {category.links.map((link, j) => (
+                    <a
+                      key={j}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group block"
+                    >
+                      <div className="flex items-baseline justify-between mb-2">
+                        <h3 className="text-2xl font-light text-zinc-900 dark:text-zinc-50 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors">
+                          {link.title}
+                        </h3>
+                        <span className="opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1 text-zinc-400">
+                          →
+                        </span>
+                      </div>
+                      <p className="text-sm text-zinc-500 font-mono group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors">
                         {link.desc}
                       </p>
-                    </div>
-                    <ArrowUpRight className="w-4 h-4 text-neutral-600 group-hover:text-purple-400 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 flex-shrink-0 mt-1" />
-                  </a>
-                ))}
-              </div>
-            </section>
-          ))}
+                    </a>
+                  ))}
+                </div>
+              </motion.section>
+            ))}
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="mt-32 pt-8 border-t border-neutral-800/50">
-          <div className="flex items-center justify-between text-xs text-neutral-600 font-[family-name:var(--font-mono)]">
-            <span>Last updated: {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
-            <span>pr</span>
+        <footer className="mt-32 pt-12 border-t border-zinc-200 dark:border-zinc-800">
+          <div className="flex justify-between items-center max-w-4xl mx-auto">
+            <p className="text-xs font-mono text-zinc-400">© {new Date().getFullYear()} Preyam Rao</p>
+            <Link href="/" className="text-xs font-mono text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors uppercase">
+              Home
+            </Link>
           </div>
-        </div>
+        </footer>
       </main>
-      <Footer />
-      <BackToTop />
-    </>
+    </div>
   );
 }

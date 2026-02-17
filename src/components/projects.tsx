@@ -1,142 +1,89 @@
 "use client";
 
-import Link from "next/link";
-import { ScrollReveal } from "./scroll-reveal";
-import { ArrowUpRight } from "lucide-react";
-import { useRef } from "react";
+import { motion } from "framer-motion";
 
-interface Project {
-  name: string;
-  description: string;
-  href: string;
-  tech: string[];
-  year: string;
-}
-
-const projects: Project[] = [
+const projects = [
   {
-    name: "Lumora Social",
-    description: "Web3 social platform with 32K users. $140K Sui Foundation grant. End-to-end encrypted messaging.",
-    href: "https://github.com/preyam2002",
-    tech: ["TypeScript", "Node.js", "Sui", "WebSockets"],
-    year: "2024-2025",
+    title: "Distributed Vault Replication",
+    desc: "Enterprise disaster recovery service with automated failover and sub-minute RTO. Patent-pending consensus algorithm for multi-region replication.",
+    tech: ["Java", "Kubernetes", "PostgreSQL", "gRPC"],
+    metrics: "99.99% uptime | 50ms latency",
+    link: "https://github.com/preyam"
   },
   {
-    name: "Aletheia",
-    description: "Decentralized prediction market with LMSR pricing. Multi-oracle consensus with AI verification.",
-    href: "https://github.com/preyam2002",
-    tech: ["Move", "Next.js", "OpenAI", "AWS"],
-    year: "2025",
+    title: "Real-time Social Platform",
+    desc: "Web3 social infrastructure supporting 10K+ concurrent connections. Implemented WebSocket clustering and blockchain event indexing.",
+    tech: ["TypeScript", "Node.js", "Redis", "Sui Blockchain"],
+    metrics: "10K+ concurrent users | $140K grant",
+    link: "https://github.com/preyam"
   },
   {
-    name: "Vault Replication",
-    description: "Cross-region disaster recovery service. Patent filed. Handles 1000+ secrets per customer.",
-    href: "https://github.com/preyam2002",
-    tech: ["Java", "Micronaut", "OCI Vault", "Kubernetes"],
-    year: "2024",
-  },
+    title: "Exadata Integration Framework",
+    desc: "High-performance database integration layer for Oracle Exadata. Optimized query routing and connection pooling for enterprise workloads.",
+    tech: ["Java", "SQL", "Microservices", "OCI"],
+    metrics: "40% latency reduction | Production scale",
+    link: "https://github.com/preyam"
+  }
 ];
 
-function ProjectCard({ project, index }: { project: Project; index: number }) {
-  const cardRef = useRef<HTMLAnchorElement>(null);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    cardRef.current.style.setProperty("--mouse-x", `${x}px`);
-    cardRef.current.style.setProperty("--mouse-y", `${y}px`);
-  };
-
+export default function Projects() {
   return (
-    <ScrollReveal delay={index * 100}>
-      <Link
-        ref={cardRef}
-        href={project.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        onMouseMove={handleMouseMove}
-        className="group project-card block p-8 sm:p-10"
-      >
-        <div className="flex flex-col h-full">
-          <div className="flex items-start justify-between mb-6">
-            <div className="space-y-1">
-              <span className="font-[family-name:var(--font-mono)] text-[10px] text-neutral-600 tracking-wider">
-                {project.year}
-              </span>
-              <h3 className="text-2xl sm:text-3xl font-light text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-pink-400 transition-all duration-500">
-                {project.name}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-full border border-neutral-700 flex items-center justify-center group-hover:border-purple-500/50 group-hover:bg-purple-500/10 transition-all duration-300">
-              <ArrowUpRight className="w-4 h-4 text-neutral-500 group-hover:text-purple-400 transition-all duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+    <section id="projects" className="py-24 md:py-32 border-t border-zinc-100 dark:border-zinc-900 bg-zinc-50 dark:bg-zinc-900">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid md:grid-cols-12 gap-12">
+          <div className="md:col-span-3">
+            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest sticky top-32">03 — Projects</span>
+          </div>
+          <div className="md:col-span-9 lg:col-span-8">
+            <div className="space-y-12">
+              {projects.map((project, i) => (
+                <motion.a
+                  key={i}
+                  href={project.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group block relative p-8 bg-white dark:bg-black rounded-2xl border border-zinc-100 dark:border-zinc-800 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ delay: i * 0.1 }}
+                >
+                  <div className="flex flex-col gap-6">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="text-2xl md:text-3xl font-light text-zinc-900 dark:text-zinc-50 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors mb-2">
+                          {project.title}
+                        </h3>
+                        <p className="text-sm font-mono text-zinc-400">{project.metrics}</p>
+                      </div>
+                      <span className="p-2 rounded-full bg-zinc-50 dark:bg-zinc-900 group-hover:bg-zinc-100 dark:group-hover:bg-zinc-800 transition-colors">
+                        <svg className="w-5 h-5 text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                        </svg>
+                      </span>
+                    </div>
+                    
+                    <p className="text-lg text-zinc-500 font-light leading-relaxed max-w-2xl">
+                      {project.desc}
+                    </p>
+                    
+                    <div className="flex flex-wrap gap-2 mt-auto">
+                      {project.tech.map((t) => (
+                        <span 
+                          key={t} 
+                          className="px-3 py-1 bg-zinc-50 dark:bg-zinc-900 text-xs font-mono text-zinc-500 border border-zinc-100 dark:border-zinc-800 rounded-full"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </motion.a>
+              ))}
             </div>
           </div>
-
-          <p className="text-neutral-400 leading-relaxed mb-8 flex-grow">
-            {project.description}
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {project.tech.map((tech) => (
-              <span
-                key={tech}
-                className="font-[family-name:var(--font-mono)] text-[10px] px-3 py-1.5 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-500 group-hover:border-neutral-700 group-hover:text-neutral-400 transition-all duration-300"
-              >
-                {tech}
-              </span>
-            ))}
-          </div>
         </div>
-      </Link>
-    </ScrollReveal>
-  );
-}
-
-export function Projects() {
-  return (
-    <section className="py-32" id="work">
-      <ScrollReveal>
-        <div className="flex items-center gap-6 mb-16">
-          <span className="font-[family-name:var(--font-mono)] text-xs text-purple-500 tracking-wider">
-            02
-          </span>
-          <div className="h-px flex-1 bg-gradient-to-r from-neutral-800 to-transparent" />
-          <span className="font-[family-name:var(--font-mono)] text-xs text-neutral-500 tracking-widest uppercase">
-            Work
-          </span>
-        </div>
-      </ScrollReveal>
-
-      <ScrollReveal delay={100}>
-        <p className="text-xl text-neutral-400 font-light mb-16 max-w-xl">
-          Selected projects.
-        </p>
-      </ScrollReveal>
-
-      <div className="space-y-6">
-        {projects.map((project, index) => (
-          <ProjectCard key={project.name} project={project} index={index} />
-        ))}
       </div>
-
-      <ScrollReveal delay={400}>
-        <div className="mt-16 text-center">
-          <Link
-            href="https://github.com/preyam2002"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group inline-flex items-center gap-3 text-neutral-500 hover:text-neutral-300 transition-colors font-[family-name:var(--font-mono)] text-sm"
-          >
-            <span className="relative">
-              GitHub
-              <span className="absolute bottom-0 left-0 w-full h-px bg-neutral-700 group-hover:bg-neutral-500 transition-colors" />
-            </span>
-            <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </Link>
-        </div>
-      </ScrollReveal>
     </section>
   );
 }

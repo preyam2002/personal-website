@@ -1,98 +1,128 @@
 "use client";
 
-import { ScrollReveal } from "./scroll-reveal";
 import { motion } from "framer-motion";
-import { ChevronDown } from "lucide-react";
+import { useEffect, useState } from "react";
 
-export function Hero() {
+export default function Hero() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
   return (
-    <section className="min-h-screen flex flex-col justify-center relative overflow-hidden" id="home">
-      {/* Background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-10 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-1/3 right-10 w-96 h-96 bg-pink-500/8 rounded-full blur-3xl animate-float" style={{ animationDelay: '-3s' }} />
-      </div>
-
-      <div className="relative z-10">
-        <ScrollReveal>
-          <motion.div 
+    <section className="min-h-[90vh] flex flex-col justify-center relative pt-32 pb-20 container mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        {/* Left Content */}
+        <div className="lg:col-span-8 space-y-8">
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="mb-8"
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           >
-            <span className="inline-flex items-center gap-3">
-              <span className="w-8 h-[1px] bg-gradient-to-r from-purple-500 to-pink-500" />
-              <span className="font-[family-name:var(--font-mono)] text-xs text-neutral-500 tracking-[0.2em] uppercase">
-                Software Engineer
-              </span>
-            </span>
+            <h1 className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-serif font-light tracking-tighter leading-[0.9] text-zinc-900 dark:text-zinc-50">
+              Preyam
+              <br />
+              <span className="text-zinc-400 dark:text-zinc-600">Rao</span>
+            </h1>
           </motion.div>
-        </ScrollReveal>
 
-        <ScrollReveal delay={100}>
-          <h1 className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-light tracking-tight leading-[0.9] mb-8">
-            <span className="block text-white">preyam</span>
-            <span className="block">
-              <span className="text-gradient font-medium">rao</span>
-            </span>
-          </h1>
-        </ScrollReveal>
-
-        <ScrollReveal delay={200}>
-          <div className="max-w-lg space-y-6">
-            <p className="text-lg text-neutral-400 leading-relaxed font-light">
-              Ex-Oracle. Patent filed. $140K grant recipient. Codeforces Candidate Master (1950). Building at the intersection of distributed systems and product.
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="max-w-2xl"
+          >
+            <p className="text-xl md:text-2xl text-zinc-600 dark:text-zinc-400 font-light leading-relaxed">
+              Backend Engineer specialized in building{" "}
+              <span className="text-zinc-900 dark:text-zinc-200 font-normal">
+                scalable distributed systems
+              </span>{" "}
+              and high-performance cloud infrastructure.
             </p>
-          </div>
-        </ScrollReveal>
+          </motion.div>
 
-        <ScrollReveal delay={300}>
-          <div className="mt-12 flex flex-wrap items-center gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-wrap gap-4 pt-4"
+          >
             <a
-              href="#work"
-              className="group relative inline-flex items-center gap-3 px-8 py-4 bg-white text-black rounded-full font-[family-name:var(--font-mono)] text-sm tracking-wide overflow-hidden transition-all hover:pr-10"
+              href="#projects"
+              className="px-8 py-3 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 rounded-full font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
             >
-              <span className="relative z-10">View Work</span>
-              <svg 
-                className="w-4 h-4 relative z-10 transition-transform group-hover:translate-x-1" 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
+              View Work
+            </a>
+            <a
+              href="mailto:preyamsingh@gmail.com"
+              className="px-8 py-3 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-full font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+            >
+              Contact Me
+            </a>
+          </motion.div>
+        </div>
+
+        {/* Right Content / Decorative */}
+        <div className="lg:col-span-4 flex flex-col justify-end items-start lg:items-end space-y-8 lg:space-y-12">
+           <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.6, duration: 0.8 }}
+            className="text-right hidden lg:block"
+          >
+            <p className="text-sm font-mono text-zinc-500 mb-2">CURRENTLY AT</p>
+            <p className="text-lg font-medium text-zinc-900 dark:text-zinc-100">Lumora Social</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.7, duration: 0.8 }}
+            className="text-right hidden lg:block"
+          >
+             <p className="text-sm font-mono text-zinc-500 mb-2">PREVIOUSLY</p>
+             <p className="text-lg font-medium text-zinc-900 dark:text-zinc-100">Oracle</p>
+          </motion.div>
+          
+           <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.8, duration: 0.8 }}
+            className="flex flex-col lg:items-end gap-3"
+          >
+            <p className="text-sm font-mono text-zinc-500 mb-1">CONNECT</p>
+            {[
+              { name: "GitHub", url: "https://github.com/preyam" },
+              { name: "LinkedIn", url: "https://linkedin.com/in/preyamrao" },
+              { name: "Email", url: "mailto:preyamsingh@gmail.com" }
+            ].map((social) => (
+              <a
+                key={social.name}
+                href={social.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors flex items-center gap-2 group"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <span className="absolute inset-0 bg-white group-hover:opacity-0 transition-opacity" />
-            </a>
-            <a
-              href="#contact"
-              className="group inline-flex items-center gap-2 px-8 py-4 text-neutral-500 hover:text-white transition-colors font-[family-name:var(--font-mono)] text-sm tracking-wide"
-            >
-              <span className="relative">
-                Contact
-                <span className="absolute bottom-0 left-0 w-0 h-px bg-gradient-to-r from-purple-500 to-pink-500 group-hover:w-full transition-all duration-300" />
-              </span>
-            </a>
-          </div>
-        </ScrollReveal>
+                {social.name}
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:translate-x-1">→</span>
+              </a>
+            ))}
+          </motion.div>
+        </div>
       </div>
-
-      {/* Scroll indicator */}
+      
+      {/* Scroll Indicator */}
       <motion.div 
-        className="absolute bottom-12 left-1/2 -translate-x-1/2"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1, duration: 0.6 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1, duration: 1 }}
+        className="absolute bottom-10 left-1/2 -translate-x-1/2 hidden md:flex flex-col items-center gap-2"
       >
-        <motion.div
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          className="flex flex-col items-center gap-2 text-neutral-600"
-        >
-          <span className="font-[family-name:var(--font-mono)] text-[10px] tracking-widest uppercase">Scroll</span>
-          <ChevronDown className="w-4 h-4" />
-        </motion.div>
+        <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Scroll</span>
+        <div className="w-px h-12 bg-linear-to-b from-zinc-400 to-transparent opacity-50" />
       </motion.div>
     </section>
   );
