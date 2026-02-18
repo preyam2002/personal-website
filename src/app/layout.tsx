@@ -2,12 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Preyam Rao | Backend Engineer",
+  title: "Preyam Rao",
   description:
-    "Backend Engineer at Lumora Social. Ex-Oracle. Patent filed. $140K grant recipient. Building distributed systems at scale.",
+    "Software Engineer. Ex-Oracle. Patent filed. $140K grant recipient. Building distributed systems at scale.",
   keywords: [
     "software engineer",
-    "backend engineer",
     "distributed systems",
     "preyam rao",
     "oracle",
@@ -21,16 +20,16 @@ export const metadata: Metadata = {
   authors: [{ name: "Preyam Rao" }],
   creator: "Preyam Rao",
   openGraph: {
-    title: "Preyam Rao | Backend Engineer",
-    description: "Backend Engineer. Ex-Oracle. Patent filed. $140K grant recipient.",
+    title: "Preyam Rao",
+    description: "Software Engineer. Ex-Oracle. Patent filed. $140K grant recipient.",
     type: "website",
     locale: "en_US",
     siteName: "Preyam Rao",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Preyam Rao | Backend Engineer",
-    description: "Backend Engineer. Ex-Oracle. Patent filed.",
+    title: "Preyam Rao",
+    description: "Software Engineer. Ex-Oracle. Patent filed.",
     creator: "@preyam2002",
   },
   robots: {
