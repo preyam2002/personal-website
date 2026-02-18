@@ -1,40 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Roboto+Serif:ital,opsz,wdth,wght,GRAD@0,8..144,50..150,100..900,-50..100;1,8..144,50..150,100..900,-50..100&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-serif: "Roboto Serif", Georgia, serif;
-  --font-mono: "DM Mono", monospace;
-  --font-sans: "Inter", sans-serif;
-}
-
-:root {
-  /* Refined Palette */
-  --bg: #fafafa; /* Slightly off-white for less glare */
-  --card-bg: #ffffff;
-  --text-primary: #18181b; 
-  --text-secondary: #52525b;
-  --text-tertiary: #a1a1aa;
-  --accent: #18181b;
-  --border: #e4e4e7;
-  --hover-bg: #f4f4f5;
-  
-  /* Spacing */
-  --section-spacing: 8rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #09090b;
-    --card-bg: #18181b;
-    --text-primary: #fafafa;
-    --text-secondary: #a1a1aa;
-    --text-tertiary: #52525b;
-    --accent: #fafafa;
-    --border: #27272a;
-    --hover-bg: #27272a;
-  }
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-mono: "Space Mono", monospace;
+  --font-sans: "Inter", -apple-system, sans-serif;
 }
 
 * {
@@ -50,84 +22,46 @@ html {
 }
 
 body {
-  background: var(--bg);
-  color: var(--text-primary);
-  line-height: 1.6;
-  min-height: 100vh;
-  overflow-x: hidden;
+  background: #ffffff;
+  color: #1a1a1a;
   font-family: var(--font-sans);
   font-size: 16px;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  line-height: 1.6;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Typography Utils - utilizing Tailwind 4 theme variables if needed, but classes work too */
-.font-serif {
-  font-family: var(--font-serif);
+::selection {
+  background: #1a1a1a;
+  color: #ffffff;
 }
 
-.font-mono {
-  font-family: var(--font-mono);
+::-webkit-scrollbar {
+  width: 0px;
 }
 
 .container {
-  max-width: 80rem;
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
 @media (min-width: 768px) {
   .container {
-    padding-left: 2rem;
-    padding-right: 2rem;
+    padding-left: 4rem;
+    padding-right: 4rem;
   }
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 99px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
-
-/* Selection */
-::selection {
-  background: var(--text-primary);
-  color: var(--bg);
-}
-
-/* Link Hover Effect */
-.hover-underline-animation {
-  position: relative;
-  display: inline-block;
-}
-
-.hover-underline-animation::after {
-  content: '';
-  position: absolute;
-  width: 100%;
-  transform: scaleX(0);
-  height: 1px;
-  bottom: 0;
-  left: 0;
-  background-color: currentColor;
-  transform-origin: bottom right;
-  transition: transform 0.25s ease-out;
-}
-
-.hover-underline-animation:hover::after {
-  transform: scaleX(1);
-  transform-origin: bottom left;
+@media (min-width: 1024px) {
+  .container {
+    padding-left: 6rem;
+    padding-right: 6rem;
+  }
 }

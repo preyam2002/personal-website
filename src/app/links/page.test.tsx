@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import LinksPage from './page';
 
-// Mock next/link
 jest.mock('next/link', () => {
   const MockedLink = ({ children, href, ...props }: { children: React.ReactNode; href: string }) => (
     <a href={href} {...props}>{children}</a>
@@ -10,7 +9,6 @@ jest.mock('next/link', () => {
   return MockedLink;
 });
 
-// Mock framer-motion with proper handling of animation props
 jest.mock('framer-motion', () => ({
   motion: {
     div: ({ children, ...props }: React.HTMLProps<HTMLDivElement> & { children: React.ReactNode }) => (
@@ -26,7 +24,7 @@ describe('LinksPage', () => {
   it('renders the page title', () => {
     render(<LinksPage />);
     expect(screen.getByText('Curated')).toBeInTheDocument();
-    expect(screen.getByText('resources')).toBeInTheDocument();
+    expect(screen.getByText('Resources')).toBeInTheDocument();
   });
 
   it('renders the description', () => {
@@ -52,7 +50,7 @@ describe('LinksPage', () => {
 
   it('has working back link to home', () => {
     render(<LinksPage />);
-    const backLink = screen.getByText('Back to Home');
+    const backLink = screen.getByText('Back');
     expect(backLink).toBeInTheDocument();
     expect(backLink.closest('a')).toHaveAttribute('href', '/');
   });
@@ -67,6 +65,6 @@ describe('LinksPage', () => {
 
   it('renders footer with copyright', () => {
     render(<LinksPage />);
-    expect(screen.getByText(/2026 PREYAM RAO/)).toBeInTheDocument();
+    expect(screen.getByText(/\d{4} Preyam Rao/)).toBeInTheDocument();
   });
 });
