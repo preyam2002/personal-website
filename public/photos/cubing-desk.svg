@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#18122f"/>
+      <stop offset="100%" stop-color="#2a1f4d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <circle cx="1040" cy="160" r="145" fill="#ff9b6a" opacity="0.28"/>
+  <rect x="150" y="210" width="900" height="490" rx="24" fill="#111126" stroke="#c399ff" stroke-opacity="0.38"/>
+  <text x="220" y="355" fill="#efe0ff" font-family="monospace" font-size="48" letter-spacing="4">CUBING DESK</text>
+  <text x="220" y="430" fill="#b5a6d1" font-family="monospace" font-size="26">replace this with your own photo</text>
+</svg>

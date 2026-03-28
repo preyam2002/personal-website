@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f1e2c"/>
+      <stop offset="100%" stop-color="#1a3945"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <circle cx="930" cy="180" r="170" fill="#69f8e2" opacity="0.26"/>
+  <rect x="190" y="220" width="820" height="470" rx="22" fill="#0b1623" stroke="#7bd8ff" stroke-opacity="0.35"/>
+  <text x="230" y="360" fill="#d8edff" font-family="monospace" font-size="48" letter-spacing="4">CHESS NIGHT</text>
+  <text x="230" y="430" fill="#8eb3ca" font-family="monospace" font-size="26">replace this with your own photo</text>
+</svg>

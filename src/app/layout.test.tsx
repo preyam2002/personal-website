@@ -1,13 +1,15 @@
-import { render, screen } from '@testing-library/react';
+import { renderToStaticMarkup } from "react-dom/server.node";
 import RootLayout from './layout';
 
 describe('RootLayout', () => {
-  it('renders children content', () => {
-    render(
+  it('renders html wrapper and children content', () => {
+    const markup = renderToStaticMarkup(
       <RootLayout>
-        <div data-testid="test-child">Test Content</div>
+        <div>Test Content</div>
       </RootLayout>
     );
-    expect(screen.getByTestId('test-child')).toBeInTheDocument();
+
+    expect(markup).toContain('lang="en"');
+    expect(markup).toContain("Test Content");
   });
 });

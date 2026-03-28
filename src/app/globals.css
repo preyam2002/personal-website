@@ -7,6 +7,13 @@
   --font-serif: "Instrument Serif", Georgia, serif;
   --font-mono: "Space Mono", monospace;
   --font-sans: "Inter", -apple-system, sans-serif;
+  --bg-base: #f5f6f0;
+  --ink: #182126;
+  --muted: #556068;
+  --panel: #fcfcf9;
+  --line: #dfe3d8;
+  --accent: #2f6d62;
+  --accent-soft: #e5f0ec;
 }
 
 * {
@@ -22,8 +29,11 @@ html {
 }
 
 body {
-  background: #ffffff;
-  color: #1a1a1a;
+  background:
+    radial-gradient(circle at 0% 0%, #e6f0eb 0%, transparent 42%),
+    radial-gradient(circle at 85% 5%, #f2ebe2 0%, transparent 45%),
+    var(--bg-base);
+  color: var(--ink);
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.6;
@@ -36,7 +46,7 @@ body {
 }
 
 ::selection {
-  background: #1a1a1a;
+  background: var(--ink);
   color: #ffffff;
 }
 
@@ -50,6 +60,37 @@ body {
   width: 100%;
   padding-left: 2rem;
   padding-right: 2rem;
+}
+
+.glass-panel {
+  background: color-mix(in oklab, var(--panel) 88%, white);
+  border: 1px solid color-mix(in oklab, var(--line) 90%, white);
+  backdrop-filter: blur(12px);
+}
+
+.soft-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  transition: transform 260ms ease, border-color 260ms ease, box-shadow 260ms ease;
+}
+
+.soft-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in oklab, var(--accent) 36%, var(--line));
+  box-shadow: 0 18px 40px -30px rgba(14, 22, 26, 0.6);
+}
+
+.section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: color-mix(in oklab, var(--muted) 65%, white);
+  font-family: var(--font-mono);
+}
+
+.dot-grid {
+  background-image: radial-gradient(color-mix(in oklab, var(--line) 85%, white) 0.8px, transparent 0.8px);
+  background-size: 10px 10px;
 }
 
 @media (min-width: 768px) {

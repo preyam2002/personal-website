@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f1522"/>
+      <stop offset="100%" stop-color="#173757"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <circle cx="1020" cy="160" r="165" fill="#7bd0ff" opacity="0.23"/>
+  <rect x="155" y="220" width="890" height="470" rx="24" fill="#0a1018" stroke="#7ebfff" stroke-opacity="0.35"/>
+  <text x="220" y="360" fill="#d9eeff" font-family="monospace" font-size="48" letter-spacing="4">CODING SETUP</text>
+  <text x="220" y="430" fill="#94b5d2" font-family="monospace" font-size="26">replace this with your own photo</text>
+</svg>
