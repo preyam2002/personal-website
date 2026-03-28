@@ -17,14 +17,14 @@ const proof = [
 
 const tools = [
   "TypeScript",
-  "Go",
-  "Java",
-  "PostgreSQL",
-  "Redis",
-  "Kafka",
-  "Kubernetes",
-  "Terraform",
+  "C++",
+  "Python",
   "Next.js",
+  "React",
+  "Sui Move",
+  "PostgreSQL",
+  "Three.js",
+  "Claude API",
 ];
 
 const experience = [
@@ -52,37 +52,37 @@ const experience = [
 
 const projects = [
   {
-    title: "Distributed Vault Replication",
-    challenge: "Securely sync secrets across isolated environments.",
-    stack: "Go · Kafka · PostgreSQL · Kubernetes",
+    title: "Aletheia — Prediction Markets on Sui",
+    challenge: "Build a decentralized prediction market with AI oracle resolution.",
+    stack: "Next.js · Sui Move · MongoDB · LMSR AMM · OpenAI",
     outcomes: [
-      "99.95% reliability in staging load tests",
-      "Sub-2s p95 secret synchronization",
-      "60% faster recovery via failover runbooks",
+      "Multi-outcome markets with SEAL encryption",
+      "AI oracle consensus with AWS Nitro Enclaves option",
+      "15+ E2E tests against live testnet",
     ],
-    url: "https://github.com/preyam2002",
+    url: "https://github.com/preyam2002/Aletheia",
   },
   {
-    title: "Real-time Social Platform",
-    challenge: "Keep feed interactions fast under high event volume.",
-    stack: "TypeScript · Node.js · Redis · WebSockets",
+    title: "HFT Trading System",
+    challenge: "Achieve sub-microsecond latency for automated trading.",
+    stack: "C++17 · SIMD · io_uring · Lock-free queues · FIX Protocol",
     outcomes: [
-      "10K+ concurrent websocket benchmark",
-      "Feed API p95 cut from 420ms to 180ms",
-      "28% infra cost reduction from cache redesign",
+      "1-3μs end-to-end p50 latency",
+      "Custom Vim simulator with 30+ keystroke modules",
+      "Exchange integrations: Binance, Hyperliquid, Polymarket",
     ],
-    url: "https://github.com/preyam2002",
+    url: "https://github.com/preyam2002/HFT-system",
   },
   {
-    title: "Exadata Integration Framework",
-    challenge: "Make onboarding + releases safer and faster.",
-    stack: "Java · Spring Boot · Oracle DB · Terraform",
+    title: "VibeShield — Security Scanner",
+    challenge: "Black-box penetration testing with zero code access.",
+    stack: "Next.js · Cheerio · Redis · Docker · 54 Attack Modules",
     outcomes: [
-      "Onboarding reduced from 2 weeks to 3 days",
-      "Guardrails for repeated config incidents",
-      "Higher release confidence via automation",
+      "OWASP Top 10 + AI/LLM-specific security checks",
+      "CI/CD integration with SARIF, JUnit, webhook exports",
+      "Platform-specific: Next.js, Supabase, Firebase, Stripe",
     ],
-    url: "https://github.com/preyam2002",
+    url: "https://github.com/preyam2002/vibeshield",
   },
 ];
 
