@@ -135,7 +135,8 @@ export default function Home() {
               </span>
             </h1>
           <p className="relative mt-7 max-w-3xl text-base sm:text-lg text-[var(--muted)]">
-            I build backend systems that stay clear for teams and resilient in production.
+            Full-stack engineer building prediction markets, AI tools, and low-latency systems.
+            From Sui Move smart contracts to sub-microsecond C++ trading engines.
           </p>
           <p className="relative mt-3 text-sm text-[var(--muted)]">
             Open to full-time roles, selective freelance, and high-context product collaborations.

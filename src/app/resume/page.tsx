@@ -4,7 +4,7 @@ const resumeSections = [
   {
     title: "Summary",
     content: [
-      "Software Engineer with experience building distributed systems, backend platforms, and operational tooling for production-scale software.",
+      "Full-stack engineer building prediction markets, AI-powered tools, and low-latency systems. TypeScript, C++, Python, Sui Move. From decentralized finance to real-time audio processing.",
     ],
   },
   {
@@ -19,11 +19,21 @@ const resumeSections = [
     content: ["B.Tech in Computer Science, IIT Kharagpur (2019 - 2023)"],
   },
   {
+    title: "Selected Projects",
+    content: [
+      "Aletheia — Decentralized prediction market on Sui blockchain with LMSR AMM and AI oracle resolution",
+      "HFT System — Ultra-low latency C++17 trading engine with sub-microsecond SPSC queues and SIMD orderbook",
+      "Kindred — Social taste-matching platform with 97 API endpoints and 16 viral features",
+      "VibeShield — Black-box security scanner with 54 attack modules and CI/CD integration",
+      "PianoScore — Real-time piano practice app with MIDI input and AI sight-reading",
+    ],
+  },
+  {
     title: "Highlights",
     content: [
       "Patent filed",
       "$140K grant recipient",
-      "Background in distributed systems and scalable service design",
+      "IIT Kharagpur CS graduate",
     ],
   },
 ];
@@ -44,7 +54,7 @@ export default function ResumePage() {
             Preyam Rao
           </h1>
           <p className="text-neutral-500 mt-4 max-w-2xl">
-            Software Engineer focused on backend systems, distributed architecture, and reliability.
+            Full-stack engineer. Prediction markets, AI tools, low-latency systems, and blockchain.
           </p>
           <div className="flex flex-wrap gap-6 mt-6">
             <a
