@@ -18,8 +18,8 @@ export default function Reveal({
     const el = ref.current;
     if (!el) return;
     if (typeof IntersectionObserver === "undefined") {
-      setShown(true);
-      return;
+      const frame = requestAnimationFrame(() => setShown(true));
+      return () => cancelAnimationFrame(frame);
     }
     const io = new IntersectionObserver(
       (entries) => {

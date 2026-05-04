@@ -1,26 +1,17 @@
 import Link from "next/link";
-import IstClock from "./IstClock";
-import { getEditionLabel, getInitialIst, getDateline } from "@/lib/edition";
 
 const navItems = [
   { label: "Work", href: "/#work" },
   { label: "Dispatches", href: "/dispatches" },
-  { label: "Rankings", href: "/rankings" },
-  { label: "Resume", href: "/resume" },
+  { label: "Contact", href: "mailto:preyam2002@gmail.com" },
 ];
 
 export default function Navigation() {
-  const edition = getEditionLabel();
-  const ist = getInitialIst();
-  const dateline = getDateline();
   return (
     <header className="frame">
       <div className="masthead">
-        <div className="masthead-left">
-          ED. {edition} · {dateline} · <IstClock initial={ist} />
-        </div>
         <Link href="/" className="masthead-mark">
-          The Preyam Broadsheet
+          preyam rao
         </Link>
         <nav className="masthead-right">
           {navItems.map((item) => (
@@ -30,7 +21,7 @@ export default function Navigation() {
           ))}
         </nav>
       </div>
-      <div className="rule-double" aria-hidden="true" />
+      <div className="rule-thin" aria-hidden="true" />
     </header>
   );
 }

@@ -7,9 +7,9 @@ import {
 } from "@/lib/dispatches";
 
 export const metadata = {
-  title: "Dispatches — The Preyam Broadsheet",
+  title: "Dispatches — Preyam Rao",
   description:
-    "Notes from the desk on systems, markets, and the work itself.",
+    "Notes on systems, markets, and the work itself.",
 };
 
 export default function DispatchesPage() {
@@ -20,11 +20,6 @@ export default function DispatchesPage() {
       <Navigation />
 
       <section className="frame page-header">
-        <div className="page-ornament">
-          <span>Section II</span>
-          <span className="dot">●</span>
-          <span>Page 01</span>
-        </div>
         <p className="kicker kicker-vermillion">— Dispatches —</p>
         <h1 className="page-title">From the desk</h1>
         <p className="page-dek">
@@ -35,8 +30,7 @@ export default function DispatchesPage() {
 
       <section className="frame index" aria-label="Dispatch index">
         <div className="index-head">
-          <p className="kicker kicker-strong">Index of dispatches</p>
-          <p className="kicker">№ · Date · Title · Tags</p>
+          <p className="kicker kicker-strong">All filings</p>
         </div>
 
         {dispatches.length === 0 ? (
@@ -46,22 +40,22 @@ export default function DispatchesPage() {
         ) : (
           <ol className="index-list">
             {dispatches.map((d, i) => (
-              <li key={d.slug} className="index-row dispatch-row">
-                <Link href={`/dispatches/${d.slug}`}>
+              <li key={d.slug} className="index-row">
+                <Link href={`/dispatches/${d.slug}`} className="row-inner-link">
                   <span className="num">
                     {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <span className="dispatch-date">
-                    {formatDispatchDate(d.date)}
                   </span>
                   <div className="desc">
                     <span className="title">{d.title}</span>
                     <span className="sub">{d.dek}</span>
+                    <span className="stack">
+                      {formatDispatchDate(d.date)}
+                      {d.reading && <> · {d.reading}</>}
+                      {d.tags && d.tags.length > 0 && (
+                        <> · {d.tags.slice(0, 3).join(" · ")}</>
+                      )}
+                    </span>
                   </div>
-                  <span className="tag">
-                    {(d.tags ?? []).slice(0, 3).join(" · ")}
-                  </span>
-                  <span className="open">Read ↗</span>
                 </Link>
               </li>
             ))}

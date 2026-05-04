@@ -28,19 +28,15 @@ const jetbrains = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Preyam Rao — Broadsheet",
+  title: "Preyam Rao",
   description:
-    "Software engineer working on prediction markets, AI tools, and low-latency systems. Ex-Oracle. Patent filed. $140K grant recipient.",
+    "Software engineer working across the web, AI, and systems.",
   keywords: [
     "preyam rao",
     "software engineer",
-    "prediction markets",
-    "sui move",
-    "low latency",
-    "high frequency trading",
-    "ai tools",
-    "oracle",
-    "iit kharagpur",
+    "web",
+    "ai",
+    "systems",
     "typescript",
     "c++",
     "next.js",
@@ -49,8 +45,7 @@ export const metadata: Metadata = {
   creator: "Preyam Rao",
   openGraph: {
     title: "Preyam Rao",
-    description:
-      "Software engineer. Prediction markets, AI tools, low-latency systems.",
+    description: "Software engineer working across the web, AI, and systems.",
     type: "website",
     locale: "en_US",
     siteName: "Preyam Rao",
@@ -58,7 +53,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Preyam Rao",
-    description: "Software engineer. Prediction markets, AI tools, low-latency systems.",
+    description: "Software engineer working across the web, AI, and systems.",
     creator: "@preyam2002",
   },
   robots: {

@@ -12,7 +12,7 @@ type Combo = {
 const COMBOS: Record<string, Combo> = {
   "g h": {
     keys: ["g", "h"],
-    description: "Front page",
+    description: "Home",
     exec: (r) => r.push("/"),
   },
   "g d": {
@@ -20,19 +20,9 @@ const COMBOS: Record<string, Combo> = {
     description: "Dispatches",
     exec: (r) => r.push("/dispatches"),
   },
-  "g r": {
-    keys: ["g", "r"],
-    description: "Rankings",
-    exec: (r) => r.push("/rankings"),
-  },
-  "g v": {
-    keys: ["g", "v"],
-    description: "Vita / Resume",
-    exec: (r) => r.push("/resume"),
-  },
   "g w": {
     keys: ["g", "w"],
-    description: "Selected work",
+    description: "Work",
     exec: (r) => {
       r.push("/#work");
     },
