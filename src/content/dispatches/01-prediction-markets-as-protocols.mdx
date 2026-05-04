@@ -1,0 +1,60 @@
+---
+slug: "01-prediction-markets-as-protocols"
+title: "Prediction markets as protocols, not products"
+kicker: "Dispatch № 01"
+dek: "On the difference between a market that resolves cleanly and a market that survives doubt."
+date: "2026-04-12"
+reading: "5 min"
+tags: ["markets", "sui", "design"]
+---
+
+<Dropcap>P</Dropcap>rediction markets are easy to demo and miserable to ship.
+The hard part isn't the order book or the AMM — those are tractable. The hard part
+is what happens at the edge: when a question resolves ambiguously, when an oracle
+disagrees with the consensus, when a market survives the news cycle but not the
+appeal cycle.
+
+A prediction market is, finally, a contract about belief. The protocol is what
+keeps the contract honest after both sides have left the room.
+
+<Pullquote>
+A protocol is a market’s personality after the cameras leave.
+</Pullquote>
+
+## What products get wrong
+
+Most prediction-market products optimize for the open: clean UX, fast settlement,
+liquid order books. That's the easy half. They miss the close — the part of the
+lifecycle where a market either earns trust for the next round or quietly bleeds
+it. <Marginalia>Trust compounds quietly. Distrust does not.</Marginalia>
+
+The closing protocol matters more than the opening one. When a question resolves
+the way *most* people expected, no one notices. When it resolves another way, the
+protocol either has a clear path — appeal, evidence, oracle re-vote, payout
+delay — or it doesn't, and the market becomes a story about the protocol
+instead of a tool for prediction.
+
+## Three knobs that matter
+
+When designing a market system on chain, three knobs do most of the work:
+
+1. **Resolution cardinality.** Binary is the easy default; multi-outcome markets
+   are where the hard cases hide. Most ambiguity is structural — between
+   outcomes, not within them.
+2. **Oracle composition.** Single oracle is fast and brittle. Committee oracles
+   are slow and political. AI-augmented committees are something new, and worth
+   taking seriously when paired with verifiable execution.
+3. **Appeal window.** A market that settles immediately is more useful for
+   speculators and worse for everyone else. The right answer is asymmetric: fast
+   for unambiguous outcomes, slow when challenged.
+
+The interesting design surface lives at the intersection of all three.
+
+## What I'm trying
+
+For *Aletheia*, I'm working with multi-outcome resolution, an AI-oracle committee
+with deterministic seeds, and SEAL-encrypted appeal evidence. The goal is a
+market protocol that holds shape under pressure — not just one that runs in the
+happy path.
+
+More on the oracle committee in the next dispatch.

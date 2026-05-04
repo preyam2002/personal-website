@@ -1,344 +1,292 @@
 import Link from "next/link";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
+import SealMark from "@/components/SealMark";
+import { getAllDispatches, formatDispatchDate } from "@/lib/dispatches";
+import { getEditionNumber, getDateline } from "@/lib/edition";
 
-const links = [
-  { label: "GitHub", url: "https://github.com/preyam2002" },
-  { label: "LinkedIn", url: "https://linkedin.com/in/preyam" },
-  { label: "Email", url: "mailto:preyam2002@gmail.com" },
+const tickerItems = [
+  "DISPATCH 04.29.2026",
+  "MARKETS / OPEN",
+  "ALETHEIA — TESTNET LIVE",
+  "LUMORA — SUI MAINNET ✓",
+  "HFT/LO — 1.2μs P50 TICK-TO-TRADE",
+  "VIBESHIELD — 54 MODULES SHIPPED",
+  "KEYFLOW — V1.2 RELEASED",
+  "PATENT — FILED",
+  "GRANT — $140K AWARDED",
+  "IIT KGP CS '23",
+  "ORACLE ALUMNUS",
+  "OPEN TO COLLAB",
 ];
 
-const proof = [
-  "Ex-Oracle",
-  "IIT Kharagpur CS '23",
-  "Patent filed",
-  "$140K grant recipient",
-];
-
-const tools = [
-  "TypeScript",
-  "C++",
-  "Python",
-  "Next.js",
-  "React",
-  "Sui Move",
-  "PostgreSQL",
-  "Three.js",
-  "Claude API",
-];
-
-const experience = [
+const works = [
   {
-    period: "2024 - Present",
-    role: "Backend Engineer",
-    company: "Lumora Social",
-    points: [
-      "Built event-driven social graph and feed infrastructure.",
-      "Improved latency by tightening query strategy and indexing.",
-      "Wrote on-call playbooks and release safety checks.",
-    ],
-  },
-  {
-    period: "2023 - 2024",
-    role: "Software Engineer",
-    company: "Oracle",
-    points: [
-      "Worked on Exadata integrations for enterprise workloads.",
-      "Improved deployment reliability with validation gates.",
-      "Reduced operational incidents through better internal tooling.",
-    ],
-  },
-];
-
-const projects = [
-  {
-    title: "Aletheia — Prediction Markets on Sui",
-    challenge: "Build a decentralized prediction market with AI oracle resolution.",
-    stack: "Next.js · Sui Move · MongoDB · LMSR AMM · OpenAI",
-    outcomes: [
-      "Multi-outcome markets with SEAL encryption",
-      "AI oracle consensus with AWS Nitro Enclaves option",
-      "15+ E2E tests against live testnet",
-    ],
+    sym: "ALETHEIA · 001",
+    title: "Aletheia",
+    sub: "Decentralized prediction markets on Sui — multi-outcome, AI-resolved, SEAL-encrypted.",
+    tag: "SUI · MOVE · LMSR",
     url: "https://github.com/preyam2002/Aletheia",
   },
   {
+    sym: "HFT/LO · 002",
     title: "HFT Trading System",
-    challenge: "Achieve sub-microsecond latency for automated trading.",
-    stack: "C++17 · SIMD · io_uring · Lock-free queues · FIX Protocol",
-    outcomes: [
-      "1-3μs end-to-end p50 latency",
-      "Custom Vim simulator with 30+ keystroke modules",
-      "Exchange integrations: Binance, Hyperliquid, Polymarket",
-    ],
+    sub: "Sub-microsecond C++17 engine. 1–3μs p50 tick-to-trade across Binance, Hyperliquid, Polymarket.",
+    tag: "C++17 · SIMD · IO_URING",
     url: "https://github.com/preyam2002/HFT-system",
   },
   {
-    title: "VibeShield — Security Scanner",
-    challenge: "Black-box penetration testing with zero code access.",
-    stack: "Next.js · Cheerio · Redis · Docker · 54 Attack Modules",
-    outcomes: [
-      "OWASP Top 10 + AI/LLM-specific security checks",
-      "CI/CD integration with SARIF, JUnit, webhook exports",
-      "Platform-specific: Next.js, Supabase, Firebase, Stripe",
-    ],
+    sym: "VIBESHIELD · 003",
+    title: "VibeShield",
+    sub: "Black-box DAST scanner. 54 attack modules, OWASP Top 10 + AI/LLM-specific checks, CI exports.",
+    tag: "NEXT · REDIS · DOCKER",
     url: "https://github.com/preyam2002/vibeshield",
   },
+  {
+    sym: "LUMORA · 004",
+    title: "Lumora Social",
+    sub: "Web3 social platform on Sui. Event-driven feed infra, $140K grant recipient.",
+    tag: "SUI · TS · POSTGRES",
+    url: "https://github.com/preyam2002",
+  },
+  {
+    sym: "KEYFLOW · 005",
+    title: "KeyFlow",
+    sub: "Vim-style keyboard shortcuts for the browser. Hint mode, marks, command palette, record mode.",
+    tag: "MV3 · TS · CHROME",
+    url: "https://github.com/preyam2002/keyflow",
+  },
+  {
+    sym: "ECHO · 006",
+    title: "Echo Player",
+    sub: "Local TTS audiobook reader. Kokoro-82M WASM, Audible-grade controls, fully on-device.",
+    tag: "WASM · TS · LOCAL",
+    url: "https://github.com/preyam2002/echo-player",
+  },
 ];
 
-const personalLinks = [
-  { label: "Chess.com", url: "https://www.chess.com/member/preyam2002", note: "verify handle" },
-  { label: "Lichess", url: "https://lichess.org/@/preyam2002", note: "verify handle" },
-  { label: "Letterboxd", url: "https://letterboxd.com/preyam2002/", note: "verify handle" },
-  { label: "Goodreads", url: "https://www.goodreads.com/user/show/preyam2002", note: "verify handle" },
-  { label: "Codeforces", url: "https://codeforces.com/profile/preyam2002", note: "verify handle" },
-  { label: "LeetCode", url: "https://leetcode.com/u/preyam2002/", note: "verify handle" },
+const apparatus = [
+  { period: "2024 —", role: "Engineer", place: "Lumora Social" },
+  { period: "2023 — 24", role: "Software Engineer", place: "Oracle · Exadata" },
+  { period: "2019 — 23", role: "B.Tech, Computer Science", place: "Indian Institute of Technology, Kharagpur" },
 ];
 
-const recentNotes = [
-  {
-    title: "Designing APIs for latency budgets",
-    excerpt: "A short write-up on practical choices that keep p95 healthy without overengineering.",
-    meta: "Draft · 4 min read",
-    tags: ["backend", "performance", "api"],
-    href: "/",
-  },
-  {
-    title: "What reliability reviews should actually include",
-    excerpt: "A checklist from incident postmortems that helps teams prevent the same class of outages.",
-    meta: "Draft · 3 min read",
-    tags: ["reliability", "ops"],
-    href: "/",
-  },
-  {
-    title: "How I structure backend project readmes",
-    excerpt: "A template for making architecture and operational context obvious to future contributors.",
-    meta: "Draft · 2 min read",
-    tags: ["documentation", "engineering"],
-    href: "/",
-  },
+const elsewhere = [
+  { label: "GitHub", url: "https://github.com/preyam2002" },
+  { label: "LinkedIn", url: "https://linkedin.com/in/preyam" },
+  { label: "Chess.com", url: "https://www.chess.com/member/preyam2002" },
+  { label: "Lichess", url: "https://lichess.org/@/preyam2002" },
+  { label: "Letterboxd", url: "https://letterboxd.com/preyam2002/" },
+  { label: "Goodreads", url: "https://www.goodreads.com/user/show/preyam2002" },
+  { label: "Codeforces", url: "https://codeforces.com/profile/preyam2002" },
+  { label: "LeetCode", url: "https://leetcode.com/u/preyam2002/" },
 ];
 
 export default function Home() {
+  const edition = getEditionNumber();
+  const dateline = getDateline();
+  const dispatches = getAllDispatches().slice(0, 2);
   return (
-    <main className="min-h-screen pb-8">
+    <main>
+      <div className="ticker-bar" aria-hidden="true">
+        <div className="ticker-track">
+          {[...tickerItems, ...tickerItems].map((t, i) => (
+            <span key={i} className="ticker-item">
+              {t} <span className="v">◆</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
       <Navigation />
 
-      <section id="top" className="container pt-30 sm:pt-34 pb-20 sm:pb-24">
-        <div className="glass-panel rounded-[2rem] p-7 sm:p-11 relative overflow-hidden">
-          <div className="absolute inset-y-0 right-0 w-[32%] dot-grid opacity-45" />
-          <p className="section-label relative mb-6">$ whoami</p>
-            <h1 className="relative text-[clamp(2.6rem,9vw,8rem)] font-serif leading-[0.86] tracking-tight text-[var(--ink)] max-w-5xl">
-              Preyam Rao
-              <span className="block text-[var(--muted)]">
-                Software Engineer
-              </span>
-            </h1>
-          <p className="relative mt-7 max-w-3xl text-base sm:text-lg text-[var(--muted)]">
-            Full-stack engineer building prediction markets, AI tools, and low-latency systems.
-            From Sui Move smart contracts to sub-microsecond C++ trading engines.
-          </p>
-          <p className="relative mt-3 text-sm text-[var(--muted)]">
-            Open to full-time roles, selective freelance, and high-context product collaborations.
-          </p>
-
-          <div className="relative mt-8 flex flex-wrap gap-2">
-            {proof.map((item) => (
-              <span
-                key={item}
-                className="text-[11px] font-mono px-2.5 py-1 border border-[var(--line)] bg-[var(--accent-soft)] text-[var(--accent)]"
-              >
-                {item}
-              </span>
-            ))}
-          </div>
-
-          <div className="relative mt-9 flex flex-wrap gap-4">
-            <Link
-              href="/resume"
-              className="inline-flex items-center gap-2 text-[13px] font-mono px-5 py-2.5 bg-[var(--ink)] text-white hover:bg-[var(--accent)] transition-colors duration-300"
-            >
-              View Resume <span aria-hidden="true">&rarr;</span>
-            </Link>
-            <a
-              href="mailto:preyam2002@gmail.com?subject=Let's%20build%20something"
-              className="inline-flex items-center gap-2 text-[13px] font-mono text-[var(--muted)] hover:text-[var(--ink)] transition-colors duration-300"
-            >
-              Let&apos;s build together
-            </a>
-          </div>
+      <section className="frame hero">
+        <div className="hero-seal" aria-hidden="true">
+          <SealMark issue={edition} />
         </div>
-
-        <div className="mt-8 flex flex-wrap gap-5 sm:gap-8">
-          {links.map((link) => (
-            <a
-              key={link.label}
-              href={link.url}
-              target={link.url.startsWith("http") ? "_blank" : undefined}
-              rel={link.url.startsWith("http") ? "noopener noreferrer" : undefined}
-              className="text-[12px] font-mono text-[var(--muted)] hover:text-[var(--ink)] transition-colors duration-300"
-            >
-              {link.label}
-            </a>
-          ))}
+        <div className="dateline">
+          <span className="pill">Issue Nº {String(edition).padStart(3, "0")}</span>
+          <span className="meta">Vol. I — {dateline} — Bengaluru, IN</span>
+        </div>
+        <h1 className="hero-name">
+          <span className="line">
+            <span>Preyam</span>
+          </span>
+          <span className="line italic">
+            <span>Rao</span>
+          </span>
+        </h1>
+        <p className="hero-sub">
+          A software engineer working at the seams of <em>prediction markets</em>,{" "}
+          <em>AI tools</em>, and <em>low-latency systems</em> — from Sui Move
+          contracts to sub-microsecond C++ trading engines.
+        </p>
+        <div className="hero-foot">
+          <a href="mailto:preyam2002@gmail.com">preyam2002@gmail.com</a>
+          <span className="sep">/</span>
+          <a href="https://github.com/preyam2002" target="_blank" rel="noopener noreferrer">
+            github
+          </a>
+          <span className="sep">/</span>
+          <a href="https://linkedin.com/in/preyam" target="_blank" rel="noopener noreferrer">
+            linkedin
+          </a>
+          <span className="sep">/</span>
+          <Link href="/resume">resume</Link>
+          <span className="sep">/</span>
+          <span className="footnote">* open to senior eng &amp; founding roles</span>
         </div>
       </section>
 
-      <section className="container pb-20 sm:pb-24">
-        <p className="section-label mb-7">{"//"} Tools I Use</p>
-        <div className="soft-card rounded-3xl p-5 sm:p-6">
-          <div className="flex flex-wrap gap-2.5">
-            {tools.map((tool) => (
-              <span
-                key={tool}
-                className="text-[12px] font-mono text-[var(--muted)] border border-[var(--line)] px-3 py-1.5 rounded-full hover:border-[var(--accent)] hover:text-[var(--ink)] transition-colors duration-300"
-              >
-                {tool}
-              </span>
-            ))}
-          </div>
+      <section className="frame dispatch" id="dispatch">
+        <div className="dispatch-header">
+          <p className="kicker kicker-strong">— Dispatch from the desk —</p>
+          <p className="kicker">Filed 04.29.2026 · 04:21 IST</p>
         </div>
-      </section>
-
-      <section id="experience" className="container pb-20 sm:pb-24">
-        <p className="section-label mb-7">{"//"} Experience</p>
-        <div className="grid gap-4">
-          {experience.map((item) => (
-            <article key={item.company} className="soft-card rounded-3xl p-6 sm:p-8">
-              <div className="grid lg:grid-cols-[180px_1fr] gap-6">
-                <div>
-                  <p className="text-[11px] font-mono text-[var(--accent)] uppercase tracking-[0.2em]">{item.period}</p>
-                </div>
-                <div>
-                  <h2 className="text-2xl sm:text-3xl font-serif text-[var(--ink)] leading-tight">
-                    {item.role} <span className="text-[var(--muted)]">@ {item.company}</span>
-                  </h2>
-                  <ul className="mt-4 space-y-2.5">
-                    {item.points.map((point) => (
-                      <li key={point} className="text-sm text-[var(--muted)] leading-relaxed">
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section id="work" className="container pb-20 sm:pb-24">
-        <div className="flex justify-between items-end mb-7">
-          <p className="section-label">{"//"} Selected Work</p>
-          <p className="hidden sm:block text-[11px] font-mono text-[var(--muted)]">Challenge · Stack · Outcomes</p>
-        </div>
-        <div className="grid gap-4">
-          {projects.map((project, index) => (
-            <article key={project.title} className="soft-card rounded-[2rem] p-6 sm:p-8">
-              <div className="grid lg:grid-cols-[1.05fr_1fr] gap-8">
-                <div>
-                  <p className="text-5xl sm:text-6xl font-serif text-[#d2d8cb] leading-none mb-4">
-                    {String(index + 1).padStart(2, "0")}
-                  </p>
-                  <h3 className="text-3xl sm:text-4xl font-serif text-[var(--ink)] leading-tight">{project.title}</h3>
-                  <p className="mt-3 text-sm text-[var(--muted)]">
-                    <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-[var(--accent)]">Challenge </span>
-                    {project.challenge}
-                  </p>
-                  <p className="mt-3 text-[12px] font-mono text-[var(--muted)]">{project.stack}</p>
-                  <a
-                    href={project.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex mt-6 items-center gap-2 text-[13px] font-mono text-[var(--ink)] hover:text-[var(--accent)] transition-colors duration-300"
-                  >
-                    Open project <span aria-hidden="true">&rarr;</span>
-                  </a>
-                </div>
-                <ul className="space-y-3">
-                  {project.outcomes.map((outcome) => (
-                    <li key={outcome} className="text-sm text-[var(--muted)] leading-relaxed border-b border-[var(--line)] pb-3">
-                      {outcome}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section id="notes" className="container pb-20 sm:pb-24">
-        <div className="flex justify-between items-end mb-7">
-          <p className="section-label">{"//"} Most Recent Notes</p>
-          <p className="hidden sm:block text-[11px] font-mono text-[var(--muted)]">Writing in progress</p>
-        </div>
-        <div className="grid lg:grid-cols-3 gap-4">
-          {recentNotes.map((note) => (
-            <article key={note.title} className="soft-card rounded-3xl p-5 sm:p-6">
-              <p className="text-[11px] font-mono text-[var(--accent)]">{note.meta}</p>
-              <h3 className="mt-3 text-2xl font-serif leading-tight text-[var(--ink)]">{note.title}</h3>
-              <p className="mt-3 text-sm text-[var(--muted)]">{note.excerpt}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {note.tags.map((tag) => (
-                  <span key={tag} className="text-[10px] font-mono border border-[var(--line)] px-2 py-1 text-[var(--muted)]">
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-              <Link
-                href={note.href}
-                className="inline-flex mt-5 items-center gap-2 text-[12px] font-mono text-[var(--ink)] hover:text-[var(--accent)] transition-colors duration-300"
-              >
-                Read note <span aria-hidden="true">&rarr;</span>
-              </Link>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section id="personal" className="container pb-20 sm:pb-24">
-        <p className="section-label mb-7">{"//"} Personal Internet</p>
-        <div className="grid xl:grid-cols-[1.15fr_0.85fr] gap-5">
-          <article className="soft-card rounded-3xl p-6">
-            <h3 className="text-2xl font-serif text-[var(--ink)] mb-4">Profiles</h3>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {personalLinks.map((item) => (
-                <a
-                  key={item.label}
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="border border-[var(--line)] px-3 py-2.5 text-[12px] font-mono text-[var(--muted)] hover:text-[var(--ink)] hover:border-[var(--accent)] transition-colors duration-300"
-                >
-                  {item.label} &rarr; <span className="text-[10px]">({item.note})</span>
-                </a>
-              ))}
+        <div className="dispatch-grid">
+          <aside className="dispatch-meta">
+            <div className="tag">NOW</div>
+            <div>
+              <span className="label">SHIPPING /</span>{" "}
+              <span className="value">Lumora Social, Sui</span>
             </div>
+            <div>
+              <span className="label">SIDE /</span>{" "}
+              <span className="value">Aletheia, Move primitives</span>
+            </div>
+            <hr />
+            <div>
+              <span className="label">PRIOR /</span>{" "}
+              <span className="value">Oracle, Exadata reliability</span>
+            </div>
+            <div>
+              <span className="label">EDU /</span>{" "}
+              <span className="value">IIT Kharagpur CS, 2023</span>
+            </div>
+            <hr />
+            <div>
+              <span className="label">PATENT /</span>{" "}
+              <span className="value">filed</span>
+            </div>
+            <div>
+              <span className="label">GRANT /</span>{" "}
+              <span className="value">$140K, awarded</span>
+            </div>
+            <hr />
+            <div className="tag">FOR HIRE</div>
+            <div>
+              <span className="value">preyam2002@gmail.com</span>
+            </div>
+          </aside>
+          <article className="dispatch-body">
+            <p>
+              <span className="dropcap">B</span>uilding <em>Lumora</em> — a Web3
+              social platform on Sui — and writing Move contracts for new market
+              primitives. The work sits between distributed systems and
+              economic design: how the chain settles, how feeds rank, how an
+              event becomes a shared belief.
+            </p>
+            <p>
+              Off-hours, two threads. <em>Aletheia</em>, a decentralized
+              prediction market with AI-resolved outcomes, SEAL-encrypted state,
+              and an LMSR market maker. And a sub-microsecond C++ trading
+              engine — io_uring, lock-free SPSC ring buffers, cache-line-aligned
+              market data, integrations across Binance, Hyperliquid, Polymarket.
+            </p>
+            <p>
+              Previously at <em>Oracle</em> on Exadata, then full-time on the
+              applied side of crypto. Computer Science at <em>IIT Kharagpur</em>.
+              One US patent filed; one $140K grant in the bank. Open to senior
+              engineering and founding roles at companies that take their
+              primitives seriously.
+            </p>
           </article>
-
-          <div className="grid gap-3">
-            {[
-              {
-                title: "Photo Diary",
-                body: "Add images in /public/photos and this block becomes a visual journal.",
-              },
-              {
-                title: "Now",
-                body: "Currently interested in distributed systems, AI-assisted products, and developer UX.",
-              },
-              {
-                title: "Outside work",
-                body: "Chess, books, films, and walks that reset my brain between shipping cycles.",
-              },
-            ].map((card) => (
-              <article key={card.title} className="soft-card rounded-3xl p-5">
-                <p className="section-label mb-3">{card.title}</p>
-                <p className="text-sm text-[var(--muted)]">{card.body}</p>
-              </article>
-            ))}
-          </div>
         </div>
+      </section>
+
+      <section className="frame index" id="work">
+        <div className="index-head">
+          <p className="kicker kicker-strong">Index of Works</p>
+          <p className="kicker">№ · Symbol · Brief · Tag · Open</p>
+        </div>
+        <ol className="index-list">
+          {works.map((w, i) => (
+            <li key={w.sym} className="index-row">
+              <a href={w.url} target="_blank" rel="noopener noreferrer">
+                <span className="num">{String(i + 1).padStart(2, "0")}</span>
+                <span className="sym">{w.sym}</span>
+                <div className="desc">
+                  <span className="title">{w.title}</span>
+                  <span className="sub">{w.sub}</span>
+                </div>
+                <span className="tag">{w.tag}</span>
+                <span className="open">Open ↗</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="frame dispatches-preview" id="from-the-desk">
+        <div className="index-head">
+          <p className="kicker kicker-strong">From the Dispatches</p>
+          <Link href="/dispatches" className="kicker kicker-vermillion">
+            All filings ↗
+          </Link>
+        </div>
+        <div className="dispatches-grid">
+          {dispatches.map((d, i) => (
+            <Link
+              key={d.slug}
+              href={`/dispatches/${d.slug}`}
+              className="dispatch-card"
+            >
+              <span className="dispatch-card-num">
+                Nº {String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="dispatch-card-meta">
+                {formatDispatchDate(d.date)}
+                {d.reading && <> · {d.reading}</>}
+              </span>
+              <h3 className="dispatch-card-title">{d.title}</h3>
+              <p className="dispatch-card-dek">{d.dek}</p>
+              <span className="dispatch-card-cta">Read dispatch →</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="frame apparatus" id="apparatus">
+        <div className="apparatus-head">
+          <p className="kicker kicker-strong">Apparatus</p>
+          <p className="kicker">Period · Role · Place</p>
+        </div>
+        <ul className="apparatus-list">
+          {apparatus.map((a) => (
+            <li key={a.place} className="apparatus-row">
+              <time>{a.period}</time>
+              <span className="role">{a.role}</span>
+              <span className="place">{a.place}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="frame elsewhere" id="elsewhere">
+        <div className="elsewhere-head">
+          <p className="kicker kicker-strong">Elsewhere</p>
+          <p className="kicker">Profiles &amp; correspondence</p>
+        </div>
+        <p className="elsewhere-list">
+          {elsewhere.map((e, i) => (
+            <span key={e.label}>
+              <a href={e.url} target="_blank" rel="noopener noreferrer">
+                {e.label}
+              </a>
+              {i < elsewhere.length - 1 && <span className="sep">·</span>}
+            </span>
+          ))}
+        </p>
       </section>
 
       <Footer />

@@ -1,27 +1,56 @@
 import type { Metadata } from "next";
+import { Fraunces, Newsreader, JetBrains_Mono } from "next/font/google";
+import Keybindings from "@/components/Keybindings";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
+const fraunces = Fraunces({
+  variable: "--font-display",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
+const newsreader = Newsreader({
+  variable: "--font-body",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
+const jetbrains = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Preyam Rao",
+  metadataBase: new URL(SITE_URL),
+  title: "Preyam Rao — Broadsheet",
   description:
-    "Software Engineer. Ex-Oracle. Patent filed. $140K grant recipient. Building distributed systems at scale.",
+    "Software engineer working on prediction markets, AI tools, and low-latency systems. Ex-Oracle. Patent filed. $140K grant recipient.",
   keywords: [
-    "software engineer",
-    "distributed systems",
     "preyam rao",
+    "software engineer",
+    "prediction markets",
+    "sui move",
+    "low latency",
+    "high frequency trading",
+    "ai tools",
     "oracle",
     "iit kharagpur",
-    "kubernetes",
-    "microservices",
-    "postgresql",
-    "java",
     "typescript",
+    "c++",
+    "next.js",
   ],
   authors: [{ name: "Preyam Rao" }],
   creator: "Preyam Rao",
   openGraph: {
     title: "Preyam Rao",
-    description: "Software Engineer. Ex-Oracle. Patent filed. $140K grant recipient.",
+    description:
+      "Software engineer. Prediction markets, AI tools, low-latency systems.",
     type: "website",
     locale: "en_US",
     siteName: "Preyam Rao",
@@ -29,7 +58,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Preyam Rao",
-    description: "Software Engineer. Ex-Oracle. Patent filed.",
+    description: "Software engineer. Prediction markets, AI tools, low-latency systems.",
     creator: "@preyam2002",
   },
   robots: {
@@ -47,14 +76,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={`${fraunces.variable} ${newsreader.variable} ${jetbrains.variable}`}
+    >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#ffffff" />
+        <meta name="theme-color" content="#f3ecdd" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="The Preyam Broadsheet — Dispatches"
+          href="/feed.xml"
+        />
       </head>
-      <body className="min-h-screen bg-white text-neutral-900">
+      <body className="min-h-screen">
         {children}
+        <Keybindings />
       </body>
     </html>
   );

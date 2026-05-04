@@ -1,0 +1,65 @@
+---
+slug: "02-microseconds-and-meaning"
+title: "Microseconds and meaning"
+kicker: "Dispatch № 02"
+dek: "What an HFT system teaches you that no application engineering ever will."
+date: "2026-03-22"
+reading: "4 min"
+tags: ["hft", "c++", "systems"]
+---
+
+<Dropcap>I</Dropcap> spent a year tuning a tick-to-trade pipeline down from
+double-digit microseconds to one. The work pays poorly in shippable features and
+richly in mental models. Below, four ideas I keep using everywhere — even far
+from a trading floor.
+
+## 1. Latency budgets are honest design documents
+
+Application engineers have feelings about budgets; HFT engineers have a budget.
+There's a number on the wall. Every component announces what it spends. The
+system either meets the number or it doesn't; nothing else is real.
+
+<Pullquote>
+A latency budget is the only design document that gets read after week two.
+</Pullquote>
+
+The reason this matters outside of HFT: most "performance bugs" are really
+*budget bugs*. Nobody decided what the system was allowed to spend, so every
+component spent everything. <Marginalia>Bring a stopwatch to your next design review.</Marginalia>
+
+## 2. Cache lines are the smallest interesting unit
+
+The CPU doesn't care about your variables. It cares about 64 bytes. Once you
+internalize this, half of "we need a faster algorithm" turns into "we need to
+fit our hot data in the same cache line." A surprising amount of latency lives
+in false sharing — two threads writing to neighbors in the same line and
+fighting over coherence.
+
+You don't need to write SIMD to take this seriously. You just need to think
+about *the line*, not the variable.
+
+## 3. Allocation is a per-event decision
+
+In application code, allocation is invisible. In an HFT hot path, every `new`
+is an event, and a slow event at that. The discipline of pre-allocating
+everything you'll need on the slow path forces a different relationship with
+state: you start asking *who owns this, for how long, and what does its
+lifetime look like in cycles, not seconds*.
+
+This is the discipline I miss most when I'm back in TypeScript.
+
+## 4. Determinism is more useful than speed
+
+A 1.2μs system that occasionally pauses for 30μs is worse than a 2μs system
+that never pauses. Tail latency is the only latency the user actually feels.
+
+Determinism is also what lets you debug. A system that's fast on average but
+unpredictable in the tails is a system you can't reason about. The fast version
+of any system that you can reason about will eventually beat the faster system
+that you can't.
+
+---
+
+None of this is novel. It just becomes obvious when the budget is in
+microseconds. The lesson worth taking back is that *every* system has a budget;
+the difference in HFT is only that someone bothered to write it down.
