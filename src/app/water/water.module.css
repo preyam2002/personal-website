@@ -1,0 +1,255 @@
+.page {
+  --ocean-ink: #06171b;
+  --moon: #e9ecdf;
+  --sun: #f1d58f;
+  position: relative;
+  z-index: 3;
+  min-height: 300svh;
+  overflow: clip;
+  color: var(--moon);
+  background: var(--ocean-ink);
+  font-family: var(--font-observatory), Arial, sans-serif;
+}
+
+:global(html:has(#water-page)) {
+  scroll-behavior: smooth;
+}
+
+.page ::selection {
+  color: var(--ocean-ink);
+  background: var(--sun);
+}
+
+.surface {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100svh;
+  background: linear-gradient(160deg, #173e41, #06171b 70%);
+}
+
+.surface[data-webgl="fallback"] {
+  background:
+    radial-gradient(circle at 72% 18%, rgba(241, 213, 143, 0.2), transparent 20%),
+    linear-gradient(160deg, #173e41, #06171b 70%);
+}
+
+.section {
+  position: relative;
+  z-index: 1;
+  min-height: 100svh;
+  padding-inline: clamp(1.25rem, 4vw, 4.5rem);
+  text-shadow: 0 2px 24px rgba(0, 7, 10, 0.8);
+}
+
+.hero {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: clamp(4.5rem, 10vh, 7rem);
+}
+
+.nav {
+  position: absolute;
+  top: 0;
+  right: clamp(1.25rem, 4vw, 4.5rem);
+  left: clamp(1.25rem, 4vw, 4.5rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: clamp(1.4rem, 3vw, 2.5rem);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nav nav {
+  display: flex;
+  gap: clamp(1.2rem, 3vw, 2.8rem);
+}
+
+.nav a {
+  opacity: 0.76;
+  transition: opacity 180ms ease;
+}
+
+.nav a:hover,
+.nav a:focus-visible {
+  opacity: 1;
+}
+
+.mark {
+  font-weight: 550;
+  letter-spacing: 0.14em;
+}
+
+.mark span {
+  color: var(--sun);
+}
+
+.heroCopy {
+  max-width: 64rem;
+}
+
+.heroCopy p {
+  color: rgba(233, 236, 223, 0.72);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.heroCopy h1 {
+  margin-top: 0.55rem;
+  font-size: clamp(4rem, 10.5vw, 10rem);
+  font-weight: 530;
+  line-height: 0.84;
+  letter-spacing: -0.068em;
+}
+
+.heroCopy > span {
+  display: block;
+  max-width: 34rem;
+  margin-top: clamp(1.3rem, 2.6vw, 2.1rem);
+  font-family: var(--font-body), Georgia, serif;
+  font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+  line-height: 1.4;
+}
+
+.work {
+  display: flex;
+  align-items: center;
+}
+
+.workContent {
+  width: min(70rem, 100%);
+  margin-inline: auto;
+}
+
+.work h2,
+.contact h2 {
+  font-size: clamp(3rem, 7vw, 7rem);
+  font-weight: 520;
+  line-height: 0.9;
+  letter-spacing: -0.058em;
+}
+
+.projects {
+  display: grid;
+  margin-top: clamp(3rem, 7vh, 5rem);
+}
+
+.projects a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-block: clamp(1.2rem, 2.3vh, 1.8rem);
+  transition: color 180ms ease, padding 180ms ease;
+}
+
+.projects a:hover,
+.projects a:focus-visible {
+  padding-inline: 0.55rem;
+  color: var(--sun);
+}
+
+.projects strong {
+  font-size: clamp(1.8rem, 3.8vw, 3.8rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+
+.projects span {
+  color: rgba(233, 236, 223, 0.66);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.contact {
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.contactCopy {
+  max-width: 64rem;
+}
+
+.contactCopy > a {
+  display: inline-block;
+  margin-top: 2rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid currentColor;
+  font-family: var(--font-mono), monospace;
+  font-size: clamp(0.72rem, 1vw, 0.85rem);
+  letter-spacing: 0.06em;
+}
+
+.footer {
+  position: absolute;
+  right: clamp(1.25rem, 4vw, 4.5rem);
+  bottom: 1.8rem;
+  left: clamp(1.25rem, 4vw, 4.5rem);
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  color: rgba(233, 236, 223, 0.68);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page a:focus-visible {
+  outline: 2px solid var(--sun);
+  outline-offset: 5px;
+}
+
+@media (max-width: 600px) {
+  .section {
+    padding-inline: 1.1rem;
+  }
+
+  .nav {
+    right: 1.1rem;
+    left: 1.1rem;
+  }
+
+  .hero {
+    padding-bottom: 5rem;
+  }
+
+  .heroCopy h1 {
+    font-size: clamp(3.8rem, 20vw, 6.4rem);
+  }
+
+  .projects a {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .projects strong {
+    font-size: 2.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html:has(#water-page)) {
+    scroll-behavior: auto;
+  }
+
+  .page *,
+  .page *::before,
+  .page *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

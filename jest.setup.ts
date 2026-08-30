@@ -4,6 +4,7 @@ jest.mock('next/font/google', () => ({
   Fraunces: () => ({ variable: '--font-display', className: 'mock-display' }),
   Newsreader: () => ({ variable: '--font-body', className: 'mock-body' }),
   JetBrains_Mono: () => ({ variable: '--font-mono', className: 'mock-mono' }),
+  Bricolage_Grotesque: () => ({ variable: '--font-observatory', className: 'mock-observatory' }),
 }));
 
 jest.mock('next/navigation', () => ({

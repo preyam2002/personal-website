@@ -1,0 +1,74 @@
+.instrument {
+  position: fixed;
+  top: clamp(4.8rem, 9vh, 6.5rem);
+  right: clamp(1.25rem, 4vw, 4.5rem);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: rgba(233, 236, 223, 0.72);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.76);
+  text-transform: uppercase;
+}
+
+.instrument time {
+  min-width: 4.2rem;
+  color: #f1d58f;
+  font-variant-numeric: tabular-nums;
+}
+
+.instrument input {
+  width: clamp(5rem, 8vw, 8rem);
+  height: 1rem;
+  margin: 0;
+  appearance: none;
+  cursor: ew-resize;
+  background: transparent;
+}
+
+.instrument input::-webkit-slider-runnable-track {
+  height: 1px;
+  background: rgba(233, 236, 223, 0.38);
+}
+
+.instrument input::-webkit-slider-thumb {
+  width: 2px;
+  height: 0.8rem;
+  margin-top: -0.36rem;
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: #f1d58f;
+}
+
+.instrument input::-moz-range-track {
+  height: 1px;
+  background: rgba(233, 236, 223, 0.38);
+}
+
+.instrument input::-moz-range-thumb {
+  width: 2px;
+  height: 0.8rem;
+  border: 0;
+  border-radius: 0;
+  background: #f1d58f;
+}
+
+.instrument input:focus-visible {
+  outline: 2px solid #f1d58f;
+  outline-offset: 4px;
+}
+
+@media (max-width: 600px) {
+  .instrument {
+    top: 4.7rem;
+    right: 1.1rem;
+  }
+
+  .instrument input {
+    width: 4.5rem;
+  }
+}

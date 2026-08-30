@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { Fraunces, Newsreader, JetBrains_Mono } from "next/font/google";
+import {
+  Bricolage_Grotesque,
+  Fraunces,
+  Newsreader,
+  JetBrains_Mono,
+} from "next/font/google";
 import Keybindings from "@/components/Keybindings";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
@@ -23,6 +28,12 @@ const jetbrains = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   weight: ["400", "500"],
+  display: "swap",
+});
+
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-observatory",
+  subsets: ["latin"],
   display: "swap",
 });
 
@@ -73,7 +84,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${newsreader.variable} ${jetbrains.variable}`}
+      className={`${fraunces.variable} ${newsreader.variable} ${jetbrains.variable} ${bricolage.variable}`}
     >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
