@@ -1042,7 +1042,10 @@ vec3 renderAboveWater(vec3 origin, vec3 ray, float turbidity) {
     return atmosphere(ray, u_sunDirection, turbidity);
   }
 
-  float geometryDetail = 1.0 - smoothstep(140.0, 1100.0, distanceToSurface);
+  float horizonDetail = smoothstep(0.008, 0.085, -ray.y);
+  float geometryDetail = (
+    1.0 - smoothstep(90.0, 620.0, distanceToSurface)
+  ) * horizonDetail;
   vec3 normal = normalize(mix(
     vec3(0.0, 1.0, 0.0),
     surfaceNormal(surfacePosition.xz),
@@ -1059,12 +1062,19 @@ vec3 renderAboveWater(vec3 origin, vec3 ray, float turbidity) {
   float facing = max(dot(-ray, normal), 0.0);
   float fresnel = dielectricFresnel(facing);
   vec3 color = mix(refracted, reflected, fresnel);
+  float glitterDetail = mix(
+    0.22,
+    1.0,
+    horizonDetail * (
+      1.0 - smoothstep(100.0, 480.0, distanceToSurface)
+    )
+  );
   color += coxMunkSunGlitter(
     normal,
     -ray,
     u_primaryLightDirection,
     primaryLightRadiance(turbidity)
-  );
+  ) * glitterDetail;
   return color * mix(1.0, 0.63, u_mode);
 }
 
