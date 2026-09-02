@@ -10,7 +10,7 @@ export default function Pullquote({
       <span className="mdx-pullquote-mark" aria-hidden="true">
         “
       </span>
-      <p>{children}</p>
+      <div>{children}</div>
       {cite && <cite>— {cite}</cite>}
     </aside>
   );

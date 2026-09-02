@@ -49,27 +49,27 @@ type QualityProfile = {
 };
 
 const SIMULATION_SIZE = 192;
-const CAUSTIC_GRID_SIZE = 144;
-const CAUSTIC_TEXTURE_SIZE = 512;
 const ATMOSPHERE_TEXTURE_WIDTH = 256;
 const ATMOSPHERE_TEXTURE_HEIGHT = 96;
 const FIXED_TIME_STEP = 1 / 60;
-const SIMULATION_PLAYBACK_RATE = 0.45;
+const SIMULATION_PLAYBACK_RATE = 0.60;
+const OCEAN_WAVE_HEIGHT_SCALE = 1.18;
+const OCEAN_WAVE_COMPONENT_COUNT = 9;
 const WATER_DOMAIN_METERS = 32;
 const OCEAN_DEPTH_METERS = 36;
 const CAMERA_FOCAL_LENGTH = 2.7;
 const CAMERA_ORIGIN_TOP = [0, 3.6, -6.2] as const;
 const CAMERA_ORIGIN_BOTTOM = [0, -32.4, 11.8] as const;
-const CAMERA_TARGET_TOP = [0, -0.05, 0.7] as const;
+const CAMERA_TARGET_TOP = [0, 1.8, 0.7] as const;
 const OCEAN_SEED_KEY = "preyam-ocean-seed-v1";
 const DEFAULT_CELESTIAL_DATE = Date.UTC(2026, 5, 21, 6, 30);
 
 const FULL_QUALITY: QualityProfile = {
   atmosphereHeight: ATMOSPHERE_TEXTURE_HEIGHT,
   atmosphereWidth: ATMOSPHERE_TEXTURE_WIDTH,
-  causticGridSize: CAUSTIC_GRID_SIZE,
-  causticRevisionStride: 2,
-  causticTextureSize: CAUSTIC_TEXTURE_SIZE,
+  causticGridSize: 120,
+  causticRevisionStride: 4,
+  causticTextureSize: 384,
   frameInterval: 1_000 / 60,
   lightSampleCount: 5,
   name: "full",
@@ -78,16 +78,16 @@ const FULL_QUALITY: QualityProfile = {
 };
 
 const REDUCED_QUALITY: QualityProfile = {
-  atmosphereHeight: 72,
-  atmosphereWidth: 192,
-  causticGridSize: 96,
-  causticRevisionStride: 4,
-  causticTextureSize: 256,
+  atmosphereHeight: 60,
+  atmosphereWidth: 160,
+  causticGridSize: 80,
+  causticRevisionStride: 8,
+  causticTextureSize: 192,
   frameInterval: 1_000 / 30,
   lightSampleCount: 1,
   name: "reduced",
-  pixelBudget: 650_000,
-  simulationSize: 128,
+  pixelBudget: 400_000,
+  simulationSize: 112,
 };
 
 let cachedIWaveKernel: Float32Array | null = null;
@@ -204,7 +204,8 @@ uniform float u_floorDepth;
 uniform vec3 u_sunDirection;
 uniform vec2 u_tileOffset;
 uniform float u_oceanTime;
-uniform float u_seed;
+uniform vec4 u_waveData[${OCEAN_WAVE_COMPONENT_COUNT}];
+uniform float u_wavePhase[${OCEAN_WAVE_COMPONENT_COUNT}];
 
 out vec2 v_surfaceUv;
 out float v_transmission;
@@ -227,34 +228,21 @@ float simulationHeight(vec2 uv) {
   );
 }
 
-float oceanSwell(
-  vec2 position,
-  float wavelength,
-  float amplitude,
-  float angle,
-  float phase
-) {
-  float waveNumber = 6.28318530718 / wavelength;
-  vec2 direction = vec2(cos(angle), sin(angle));
-  float angularFrequency = sqrt(9.81 * waveNumber);
-  return amplitude * sin(
-    dot(position, direction) * waveNumber
-      - angularFrequency * u_oceanTime
-      + phase
-  );
+float spectralOceanHeight(vec2 position) {
+  float height = 0.0;
+  for (int index = 0; index < ${OCEAN_WAVE_COMPONENT_COUNT}; index += 1) {
+    vec4 wave = u_waveData[index];
+    height += wave.w * sin(
+      dot(position, wave.xy) - wave.z * u_oceanTime + u_wavePhase[index]
+    );
+  }
+  return height;
 }
 
 float oceanHeight(vec2 position) {
-  float phase = u_seed * 6.28318530718;
   float resolved = simulationHeight(fract(position / u_domainSize + 0.5));
-  return resolved
-    + oceanSwell(position, 21.0, 0.075, 0.31 + phase * 0.07, phase)
-    + oceanSwell(position, 37.0, 0.060, 0.88 + phase * 0.11, phase * 1.71)
-    + oceanSwell(position, 61.0, 0.044, 1.64 + phase * 0.05, phase * 2.37)
-    + oceanSwell(position, 97.0, 0.032, 2.22 + phase * 0.09, phase * 3.13)
-    + oceanSwell(position, 13.0, 0.018, 2.83 + phase * 0.17, phase * 4.41)
-    + oceanSwell(position, 47.0, 0.026, -0.47 + phase * 0.13, phase * 5.07)
-    + oceanSwell(position, 73.0, 0.021, 1.17 - phase * 0.08, phase * 6.31);
+  return (resolved + spectralOceanHeight(position))
+    * ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)};
 }
 
 vec3 surfaceNormal(vec2 position) {
@@ -466,6 +454,7 @@ uniform float u_floorDepth;
 uniform float u_scroll;
 uniform float u_mode;
 uniform vec3 u_sunDirection;
+uniform vec3 u_displaySunDirection;
 uniform vec3 u_moonDirection;
 uniform vec3 u_primaryLightDirection;
 uniform float u_sunAngularRadius;
@@ -474,6 +463,9 @@ uniform float u_primaryLightStrength;
 uniform float u_moonIllumination;
 uniform float u_oceanTime;
 uniform float u_seed;
+uniform float u_windSpeed;
+uniform vec4 u_waveData[${OCEAN_WAVE_COMPONENT_COUNT}];
+uniform float u_wavePhase[${OCEAN_WAVE_COMPONENT_COUNT}];
 uniform vec3 u_absorption;
 
 in vec2 v_uv;
@@ -534,34 +526,21 @@ vec2 worldToWaterUv(vec2 worldPosition) {
   return fract(worldPosition / u_domainSize + 0.5);
 }
 
-float oceanSwell(
-  vec2 position,
-  float wavelength,
-  float amplitude,
-  float angle,
-  float phase
-) {
-  float waveNumber = 6.28318530718 / wavelength;
-  vec2 direction = vec2(cos(angle), sin(angle));
-  float angularFrequency = sqrt(9.81 * waveNumber);
-  return amplitude * sin(
-    dot(position, direction) * waveNumber
-      - angularFrequency * u_oceanTime
-      + phase
-  );
+float spectralOceanHeight(vec2 position) {
+  float height = 0.0;
+  for (int index = 0; index < ${OCEAN_WAVE_COMPONENT_COUNT}; index += 1) {
+    vec4 wave = u_waveData[index];
+    height += wave.w * sin(
+      dot(position, wave.xy) - wave.z * u_oceanTime + u_wavePhase[index]
+    );
+  }
+  return height;
 }
 
 float oceanHeight(vec2 position) {
-  float phase = u_seed * 6.28318530718;
   float resolved = simulationHeight(worldToWaterUv(position));
-  return resolved
-    + oceanSwell(position, 21.0, 0.075, 0.31 + phase * 0.07, phase)
-    + oceanSwell(position, 37.0, 0.060, 0.88 + phase * 0.11, phase * 1.71)
-    + oceanSwell(position, 61.0, 0.044, 1.64 + phase * 0.05, phase * 2.37)
-    + oceanSwell(position, 97.0, 0.032, 2.22 + phase * 0.09, phase * 3.13)
-    + oceanSwell(position, 13.0, 0.018, 2.83 + phase * 0.17, phase * 4.41)
-    + oceanSwell(position, 47.0, 0.026, -0.47 + phase * 0.13, phase * 5.07)
-    + oceanSwell(position, 73.0, 0.021, 1.17 - phase * 0.08, phase * 6.31);
+  return (resolved + spectralOceanHeight(position))
+    * ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)};
 }
 
 vec3 surfaceNormal(vec2 worldPosition) {
@@ -634,7 +613,7 @@ vec3 coxMunkSunGlitter(
     (1.0 - normalHalfway * normalHalfway) / (normalHalfway * normalHalfway),
     0.0
   );
-  float meanSquareSlope = 0.003 + 0.00512 * 5.0;
+  float meanSquareSlope = 0.003 + 0.00512 * u_windSpeed;
   float distribution = exp(-tangentSquared / meanSquareSlope) / (
     PI * meanSquareSlope * pow(normalHalfway, 4.0)
   );
@@ -643,7 +622,7 @@ vec3 coxMunkSunGlitter(
     beckmannMasking(normalLight, roughness);
   float fresnel = dielectricFresnel(max(dot(viewDirection, halfway), 0.0));
   float reflectedIrradiance = fresnel * distribution * masking / (4.0 * normalView);
-  return sunColor * reflectedIrradiance * 0.28;
+  return sunColor * reflectedIrradiance * 0.36;
 }
 
 float opticalAirMass(float cosineZenith) {
@@ -667,7 +646,8 @@ vec3 atmosphericTransmittance(vec3 direction, float turbidity) {
 vec3 primaryLightRadiance(float turbidity) {
   if (u_sunDirection.y > -0.002) {
     return atmosphericTransmittance(u_sunDirection, turbidity)
-      * u_primaryLightStrength;
+      * u_primaryLightStrength
+      * 1.32;
   }
   return vec3(0.44, 0.52, 0.72) * u_primaryLightStrength;
 }
@@ -722,9 +702,19 @@ vec3 atmosphereLut(vec3 direction) {
   return textureLod(u_atmosphere, uv, 0.0).rgb;
 }
 
-vec3 atmosphere(vec3 direction, vec3 sunDirection, float turbidity) {
+vec3 atmosphere(
+  vec3 direction,
+  vec3 sunDirection,
+  float turbidity,
+  float useDisplaySun
+) {
   vec3 skyDirection = normalize(vec3(direction.x, max(direction.y, 0.002), direction.z));
-  float cosineTheta = clamp(dot(skyDirection, sunDirection), -1.0, 1.0);
+  vec3 discDirection = normalize(mix(
+    sunDirection,
+    u_displaySunDirection,
+    useDisplaySun
+  ));
+  float cosineTheta = clamp(dot(skyDirection, discDirection), -1.0, 1.0);
   vec3 sunAttenuation = atmosphericTransmittance(sunDirection, turbidity);
   float sunDisc = smoothstep(
     cos(u_sunAngularRadius * 1.08),
@@ -734,9 +724,10 @@ vec3 atmosphere(vec3 direction, vec3 sunDirection, float turbidity) {
   float lensBloom = exp(
     (cosineTheta - 1.0) / max(u_sunAngularRadius * u_sunAngularRadius * 6.0, 0.00002)
   );
+  float sunAureole = exp((cosineTheta - 1.0) / 0.00055);
   float sunVisible = step(0.0, sunDirection.y);
   vec3 directSun = sunAttenuation
-    * (sunDisc * 30.0 + lensBloom * 2.8)
+    * (sunDisc * 46.0 + lensBloom * 4.6 + sunAureole * 0.52)
     * sunVisible;
   float moonCosine = dot(skyDirection, u_moonDirection);
   float moonHalo = exp(
@@ -1033,13 +1024,13 @@ vec3 sampleUnderwaterRay(
 
 vec3 renderAboveWater(vec3 origin, vec3 ray, float turbidity) {
   if (ray.y >= -0.0001) {
-    return atmosphere(ray, u_sunDirection, turbidity);
+    return atmosphere(ray, u_sunDirection, turbidity, 1.0);
   }
 
   float distanceToSurface;
   vec3 surfacePosition;
   if (!intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition)) {
-    return atmosphere(ray, u_sunDirection, turbidity);
+    return atmosphere(ray, u_sunDirection, turbidity, 1.0);
   }
 
   float horizonDetail = smoothstep(0.008, 0.085, -ray.y);
@@ -1052,7 +1043,12 @@ vec3 renderAboveWater(vec3 origin, vec3 ray, float turbidity) {
     geometryDetail
   ));
   vec3 reflectedDirection = reflect(ray, normal);
-  vec3 reflected = atmosphere(reflectedDirection, u_sunDirection, turbidity);
+  vec3 reflected = atmosphere(
+    reflectedDirection,
+    u_sunDirection,
+    turbidity,
+    0.0
+  );
   vec3 refractedDirection = refract(ray, normal, 1.0 / WATER_IOR);
   vec3 refracted = sampleUnderwaterRay(
     surfacePosition + refractedDirection * 0.025,
@@ -1133,7 +1129,8 @@ vec3 renderBelowWater(vec3 origin, vec3 ray, float turbidity) {
     vec3 transmittedRadiance = atmosphere(
       transmittedDirection,
       u_sunDirection,
-      turbidity
+      turbidity,
+      0.0
     );
     transmittedSky += transmittedRadiance
       * transmission
@@ -1684,6 +1681,13 @@ function createPondEngine(
   gl.bindTexture(gl.TEXTURE_2D, causticTarget.texture);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, causticTarget.framebuffer);
+  gl.viewport(0, 0, quality.causticTextureSize, quality.causticTextureSize);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, causticTarget.texture);
+  gl.generateMipmap(gl.TEXTURE_2D);
   const atmosphereTarget = createRenderTarget(
     gl,
     quality.atmosphereWidth,
@@ -1885,9 +1889,11 @@ function createPondEngine(
       .map((value) => value.toFixed(3))
       .join(":");
     if (
-      causticRevision < 0 ||
-      stateRevision - causticRevision >= quality.causticRevisionStride ||
-      lightSignature !== causticLightSignature
+      scroll > 0.08 && (
+        causticRevision < 0 ||
+        stateRevision - causticRevision >= quality.causticRevisionStride ||
+        lightSignature !== causticLightSignature
+      )
     ) {
       renderCaustics(celestial, oceanTime);
       causticRevision = stateRevision;
@@ -1997,12 +2003,16 @@ export default function PondSurface({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+    const quality = getQualityProfile(coarsePointer, motionQuery.matches);
+
     const gl = canvas.getContext("webgl2", {
       alpha: false,
       antialias: false,
       depth: false,
       desynchronized: true,
-      powerPreference: "high-performance",
+      powerPreference: quality.name === "full" ? "high-performance" : "low-power",
       preserveDrawingBuffer: false,
       stencil: false,
     });
@@ -2012,9 +2022,6 @@ export default function PondSurface({
       return;
     }
 
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
-    const quality = getQualityProfile(coarsePointer, motionQuery.matches);
     let engine: ReturnType<typeof createPondEngine>;
     try {
       engine = createPondEngine(gl, mode, getSessionOceanSeed(), quality);

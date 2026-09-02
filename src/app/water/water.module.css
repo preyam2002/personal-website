@@ -40,8 +40,38 @@
   position: relative;
   z-index: 1;
   min-height: 100svh;
-  padding-inline: clamp(1.25rem, 4vw, 4.5rem);
+  padding-inline:
+    max(clamp(1.25rem, 4vw, 4.5rem), env(safe-area-inset-left))
+    max(clamp(1.25rem, 4vw, 4.5rem), env(safe-area-inset-right));
+  scroll-margin-top: 4rem;
   text-shadow: 0 2px 24px rgba(0, 7, 10, 0.8);
+}
+
+.nav {
+  position: fixed;
+  top: max(clamp(1.4rem, 3vw, 2.5rem), env(safe-area-inset-top));
+  right: max(clamp(1.25rem, 4vw, 4.5rem), env(safe-area-inset-right));
+  z-index: 6;
+  display: flex;
+  gap: clamp(1.2rem, 3vw, 2.8rem);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.76);
+  text-transform: uppercase;
+}
+
+.nav a {
+  min-height: 2.75rem;
+  padding-top: 0.25rem;
+  opacity: 0.7;
+  transition: color 180ms ease, opacity 180ms ease;
+}
+
+.nav a:hover,
+.nav a:focus-visible {
+  color: var(--sun);
+  opacity: 1;
 }
 
 .hero {
@@ -50,159 +80,186 @@
   padding-bottom: clamp(4.5rem, 10vh, 7rem);
 }
 
-.nav {
-  position: absolute;
-  top: 0;
-  right: clamp(1.25rem, 4vw, 4.5rem);
-  left: clamp(1.25rem, 4vw, 4.5rem);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: clamp(1.4rem, 3vw, 2.5rem);
-  font-family: var(--font-mono), monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.nav nav {
-  display: flex;
-  gap: clamp(1.2rem, 3vw, 2.8rem);
-}
-
-.nav a {
-  opacity: 0.76;
-  transition: opacity 180ms ease;
-}
-
-.nav a:hover,
-.nav a:focus-visible {
-  opacity: 1;
-}
-
-.mark {
-  font-weight: 550;
-  letter-spacing: 0.14em;
-}
-
-.mark span {
-  color: var(--sun);
-}
-
-.heroCopy {
+.hero h1 {
   max-width: 64rem;
-}
-
-.heroCopy p {
-  color: rgba(233, 236, 223, 0.72);
-  font-family: var(--font-mono), monospace;
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.heroCopy h1 {
-  margin-top: 0.55rem;
   font-size: clamp(4rem, 10.5vw, 10rem);
   font-weight: 530;
   line-height: 0.84;
   letter-spacing: -0.068em;
-}
-
-.heroCopy > span {
-  display: block;
-  max-width: 34rem;
-  margin-top: clamp(1.3rem, 2.6vw, 2.1rem);
-  font-family: var(--font-body), Georgia, serif;
-  font-size: clamp(1.1rem, 1.8vw, 1.5rem);
-  line-height: 1.4;
+  text-wrap: balance;
 }
 
 .work {
   display: flex;
   align-items: center;
+  padding-block: clamp(6rem, 11vh, 8rem) clamp(3rem, 7vh, 5rem);
 }
 
-.workContent {
-  width: min(70rem, 100%);
+.workContent,
+.aboutContent {
+  width: min(76rem, 100%);
   margin-inline: auto;
 }
 
-.work h2,
-.contact h2 {
-  font-size: clamp(3rem, 7vw, 7rem);
+.workHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.workHeader h2,
+.about h2 {
+  font-size: clamp(3rem, 6vw, 6rem);
   font-weight: 520;
   line-height: 0.9;
   letter-spacing: -0.058em;
 }
 
-.projects {
-  display: grid;
-  margin-top: clamp(3rem, 7vh, 5rem);
+.workHeader > a {
+  padding-block: 0.75rem;
+  color: rgba(233, 236, 223, 0.7);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-transform: uppercase;
+  transition: color 180ms ease;
 }
 
-.projects a {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 2rem;
-  padding-block: clamp(1.2rem, 2.3vh, 1.8rem);
-  transition: color 180ms ease, padding 180ms ease;
+.workHeader > a::after {
+  content: " ↗";
 }
 
-.projects a:hover,
-.projects a:focus-visible {
-  padding-inline: 0.55rem;
+.workHeader > a:hover,
+.workHeader > a:focus-visible {
   color: var(--sun);
 }
 
-.projects strong {
-  font-size: clamp(1.8rem, 3.8vw, 3.8rem);
-  font-weight: 500;
-  letter-spacing: -0.045em;
+.experience {
+  margin-top: clamp(2.25rem, 5vh, 4rem);
+  list-style: none;
 }
 
-.projects span {
-  color: rgba(233, 236, 223, 0.66);
+.experience li {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.8fr) minmax(18rem, 1.55fr) auto;
+  align-items: baseline;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  padding-block: clamp(0.9rem, 1.8vh, 1.35rem);
+  border-top: 1px solid rgba(233, 236, 223, 0.22);
+}
+
+.experience li:last-child {
+  border-bottom: 1px solid rgba(233, 236, 223, 0.22);
+}
+
+.position h3 {
+  font-size: clamp(1.15rem, 1.8vw, 1.5rem);
+  font-weight: 540;
+  letter-spacing: -0.025em;
+}
+
+.position h3 a {
+  transition: color 180ms ease;
+}
+
+.position h3 a:hover,
+.position h3 a:focus-visible {
+  color: var(--sun);
+}
+
+.position span,
+.experience time {
+  color: rgba(233, 236, 223, 0.62);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.61rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.position span {
+  display: block;
+  margin-top: 0.24rem;
+}
+
+.experience p {
+  max-width: 54ch;
+  font-family: var(--font-body), Georgia, serif;
+  font-size: clamp(0.98rem, 1.25vw, 1.12rem);
+  line-height: 1.38;
+  text-wrap: pretty;
+}
+
+.experience time {
+  white-space: nowrap;
+}
+
+.about {
+  display: flex;
+  align-items: center;
+  padding-block: clamp(6rem, 12vh, 9rem) clamp(4rem, 9vh, 6rem);
+}
+
+.aboutContent {
+  display: grid;
+  grid-template-columns: minmax(11rem, 0.45fr) minmax(0, 1.55fr);
+  column-gap: clamp(3rem, 8vw, 8rem);
+  align-items: start;
+}
+
+.aboutCopy > p:first-child {
+  max-width: 24ch;
+  font-size: clamp(2rem, 4.2vw, 4.4rem);
+  font-weight: 510;
+  line-height: 0.98;
+  letter-spacing: -0.052em;
+  text-wrap: balance;
+}
+
+.aboutCopy > p + p {
+  max-width: 45ch;
+  margin-top: clamp(1.6rem, 3.5vh, 2.7rem);
+  color: rgba(233, 236, 223, 0.8);
+  font-family: var(--font-body), Georgia, serif;
+  font-size: clamp(1.05rem, 1.45vw, 1.28rem);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.contactLinks {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem clamp(1.4rem, 3vw, 2.6rem);
+  margin-top: clamp(3rem, 7vh, 5rem);
+  padding-top: 1rem;
+  border-top: 1px solid rgba(233, 236, 223, 0.24);
   font-family: var(--font-mono), monospace;
   font-size: 0.66rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.contact {
-  display: grid;
-  place-items: center;
-  text-align: center;
+.contactLinks a {
+  min-height: 2.75rem;
+  padding-block: 0.55rem;
+  color: rgba(233, 236, 223, 0.76);
+  transition: color 180ms ease, transform 180ms ease;
 }
 
-.contactCopy {
-  max-width: 64rem;
+.contactLinks a::after {
+  content: " ↗";
 }
 
-.contactCopy > a {
-  display: inline-block;
-  margin-top: 2rem;
-  padding-bottom: 0.3rem;
-  border-bottom: 1px solid currentColor;
-  font-family: var(--font-mono), monospace;
-  font-size: clamp(0.72rem, 1vw, 0.85rem);
-  letter-spacing: 0.06em;
+.contactLinks a[href^="/"]::after {
+  content: " →";
 }
 
-.footer {
-  position: absolute;
-  right: clamp(1.25rem, 4vw, 4.5rem);
-  bottom: 1.8rem;
-  left: clamp(1.25rem, 4vw, 4.5rem);
-  display: flex;
-  justify-content: center;
-  gap: 2rem;
-  color: rgba(233, 236, 223, 0.68);
-  font-family: var(--font-mono), monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.contactLinks a:hover,
+.contactLinks a:focus-visible {
+  color: var(--sun);
+  transform: translateY(-1px);
 }
 
 .page a:focus-visible {
@@ -210,32 +267,127 @@
   outline-offset: 5px;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 760px) {
   .section {
-    padding-inline: 1.1rem;
+    padding-inline:
+      max(1.1rem, env(safe-area-inset-left))
+      max(1.1rem, env(safe-area-inset-right));
   }
 
   .nav {
-    right: 1.1rem;
-    left: 1.1rem;
+    top: max(1.2rem, env(safe-area-inset-top));
+    right: max(1.1rem, env(safe-area-inset-right));
   }
 
   .hero {
-    padding-bottom: 5rem;
+    padding-bottom: max(5rem, calc(env(safe-area-inset-bottom) + 3.5rem));
   }
 
-  .heroCopy h1 {
+  .hero h1 {
     font-size: clamp(3.8rem, 20vw, 6.4rem);
   }
 
-  .projects a {
+  .work {
     align-items: flex-start;
-    flex-direction: column;
-    gap: 0.35rem;
+    padding-block: 7rem 3rem;
   }
 
-  .projects strong {
-    font-size: 2.25rem;
+  .workHeader {
+    align-items: flex-end;
+  }
+
+  .workHeader h2,
+  .about h2 {
+    font-size: clamp(3rem, 15vw, 4.6rem);
+  }
+
+  .experience {
+    margin-top: 2rem;
+  }
+
+  .experience li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem 1rem;
+    padding-block: 0.9rem;
+  }
+
+  .experience p {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: 0.93rem;
+    line-height: 1.32;
+  }
+
+  .experience time {
+    align-self: start;
+    padding-top: 0.18rem;
+  }
+
+  .about {
+    align-items: flex-start;
+    padding-block: 7rem max(3rem, calc(env(safe-area-inset-bottom) + 2rem));
+  }
+
+  .aboutContent {
+    grid-template-columns: 1fr;
+  }
+
+  .aboutCopy {
+    margin-top: 2rem;
+  }
+
+  .aboutCopy > p:first-child {
+    font-size: clamp(2rem, 9.5vw, 3.25rem);
+  }
+
+  .aboutCopy > p + p {
+    font-size: 1rem;
+  }
+
+  .contactLinks {
+    grid-column: 1;
+    margin-top: 2.6rem;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 720px) {
+  .work,
+  .about {
+    padding-block: 5.5rem 2rem;
+  }
+
+  .workHeader h2,
+  .about h2 {
+    font-size: 2.8rem;
+  }
+
+  .experience {
+    margin-top: 1.1rem;
+  }
+
+  .experience li {
+    padding-block: 0.62rem;
+  }
+
+  .position h3 {
+    font-size: 1rem;
+  }
+
+  .experience p {
+    font-size: 0.8rem;
+  }
+
+  .aboutCopy {
+    margin-top: 1.2rem;
+  }
+
+  .aboutCopy > p:first-child {
+    font-size: 1.85rem;
+  }
+
+  .aboutCopy > p + p,
+  .contactLinks {
+    margin-top: 1.35rem;
   }
 }
 

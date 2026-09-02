@@ -41,22 +41,21 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: "Preyam Rao",
   description:
-    "Software engineer working across the web, AI, and systems.",
+    "Engineer for markets, protocols, and intelligent systems.",
   keywords: [
     "preyam rao",
     "software engineer",
-    "web",
-    "ai",
-    "systems",
-    "typescript",
-    "c++",
-    "next.js",
+    "prediction markets",
+    "sui move",
+    "protocol security",
+    "low latency systems",
+    "ai tools",
   ],
   authors: [{ name: "Preyam Rao" }],
   creator: "Preyam Rao",
   openGraph: {
     title: "Preyam Rao",
-    description: "Software engineer working across the web, AI, and systems.",
+    description: "Engineer for markets, protocols, and intelligent systems.",
     type: "website",
     locale: "en_US",
     siteName: "Preyam Rao",
@@ -64,7 +63,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Preyam Rao",
-    description: "Software engineer working across the web, AI, and systems.",
+    description: "Engineer for markets, protocols, and intelligent systems.",
     creator: "@preyam2002",
   },
   robots: {
@@ -88,12 +87,12 @@ export default function RootLayout({
     >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#f3ecdd" />
+        <meta name="theme-color" content="#1544ff" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link
           rel="alternate"
           type="application/rss+xml"
-          title="The Preyam Broadsheet — Dispatches"
+          title="Preyam Rao — Dispatches"
           href="/feed.xml"
         />
       </head>

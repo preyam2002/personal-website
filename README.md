@@ -1,99 +1,50 @@
-# Personal Portfolio
+# Preyam Rao — Personal Website
 
-A minimalist personal portfolio website built with Next.js 16 and React 19.
+A responsive personal portfolio built as a live systems observatory: a procedural signal field, evidence-led project case studies, field notes, and a separate editorial reading mode for long-form dispatches.
 
-## Tech Stack
+## Stack
 
-- **Framework**: Next.js 16.1.4 with App Router
-- **Language**: TypeScript 5
-- **UI Library**: React 19.2.3
-- **Styling**: Tailwind CSS v4 with @tailwindcss/postcss
-- **Animations**: Framer Motion 12.29.0
-- **Icons**: Lucide React 0.563.0
-- **Utilities**: clsx 2.1.1, tailwind-merge 3.4.0
-- **Linting**: ESLint 9 with eslint-config-next
+- Next.js 16, React 19, and strict TypeScript
+- Tailwind CSS v4 plus scoped custom CSS
+- Canvas 2D for the interactive signal field
+- Framer Motion and Three.js for experimental routes
+- MDX for dispatches
+- Jest for unit tests
 
-## Features
-
-- Clean, minimalist design with dark theme
-- Smooth scroll animations and transitions using Framer Motion
-- Page transition effects with AnimatePresence
-- Cursor glow effect that follows mouse movement
-- Scroll progress indicator at the top
-- Back to top button
-- Responsive layout for all devices
-- SEO optimized with comprehensive metadata
-- Google Fonts (Inter, JetBrains Mono)
-- Open Graph and Twitter card support
-
-## Project Structure
-
-```
-website/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx              # Main landing page with all sections
-│   │   ├── layout.tsx            # Root layout with fonts and metadata
-│   │   ├── globals.css           # Global styles and CSS variables
-│   │   └── links/                # Links page component
-│   ├── components/
-│   │   ├── hero.tsx              # Hero section with intro
-│   │   ├── about.tsx             # About section
-│   │   ├── projects.tsx          # Projects showcase
-│   │   ├── personal.tsx          # Personal section
-│   │   ├── contact.tsx           # Contact section
-│   │   ├── nav.tsx               # Navigation bar
-│   │   ├── footer.tsx            # Footer
-│   │   ├── scroll-reveal.tsx     # Scroll animation wrapper
-│   │   ├── page-transition.tsx   # Page transition effects
-│   │   ├── cursor-glow.tsx       # Mouse-following glow effect
-│   │   ├── scroll-progress.tsx   # Progress bar at top
-│   │   └── back-to-top.tsx       # Back to top button
-│   └── components/ui/
-│       └── tabs.tsx              # Tab component
-├── public/                       # Static assets (favicon, images)
-├── next.config.js
-├── package.json
-├── tsconfig.json
-└── tailwind.config.ts
-```
-
-## NPM Scripts
+## Commands
 
 ```bash
-npm run dev      # Start development server on default port
-npm run build    # Build for production
-npm run start    # Start production server
-npm run lint     # Run ESLint with Next.js config
-```
-
-## Development
-
-```bash
-# Install dependencies
 npm install
-
-# Run development server
 npm run dev
-
-# Build for production
+npm run lint
+npm test -- --runInBand
 npm run build
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+## Structure
+
+- `src/app/page.tsx` — portfolio composition and project content
+- `src/components/SignalField.tsx` — deterministic pointer-reactive hero canvas
+- `src/app/globals.css` — shared editorial styles plus the scoped observatory system
+- `src/content/dispatches/` — MDX writing
+- `src/app/lab/` and `src/app/lab-3d/` — experimental interaction routes
+
+## Codex design workflow
+
+The reliable workflow for a visual build is concept first, implementation second, browser evidence third:
+
+1. Research a small set of live reference sites and extract principles, not surface styling.
+2. Define the subject, audience, palette, type roles, layout, and one signature interaction.
+3. Use ImageGen for a visual-direction checkpoint when the concept is still ambiguous.
+4. Implement the chosen direction in the existing framework and content model.
+5. Compare desktop and mobile renders in Playwright, then iterate on real screenshots.
+6. Run lint, tests, and the production build before claiming completion.
+
+Useful Codex skills for this workflow are `frontend-design`, `imagegen`, `browser-e2e`, `research-current`, and `ship-check`. A plugin is not required for a one-off personal workflow; plugins are useful when packaging skills or MCP tools for reuse or distribution. In Codex CLI, invoke installed skills with `$skill-name`, browse plugins with `/plugins`, and keep durable project constraints in `AGENTS.md`.
+
+Official references: [responsive frontend workflow](https://learn.chatgpt.com/use-cases/frontend-designs), [idea to proof of concept](https://learn.chatgpt.com/use-cases/idea-to-proof-of-concept), [build skills](https://learn.chatgpt.com/docs/build-skills), and [plugins](https://learn.chatgpt.com/docs/plugins).
 
 ## Deployment
 
-This project is deployed on Vercel. Simply push to the main branch to trigger automatic deployment.
-
-## Author
-
-**Preyam Rao** - Software Engineer
-- IIT Kharagpur '23
-- Ex-Oracle
-- Candidate Master @ Codeforces
-- [GitHub](https://github.com/preyam2002)
-
-## License
-
-MIT
+The production site is configured for Vercel. Set `NEXT_PUBLIC_SITE_URL` for a custom canonical origin; otherwise it falls back to `https://preyam-rao.vercel.app`.

@@ -12,6 +12,7 @@ type OceanExperienceProps = {
 
 const DEFAULT_DATE = Date.UTC(2026, 7, 30, 14, 30);
 const DEFAULT_MINUTE = 20 * 60;
+const DAYLIGHT_EDGE_OFFSET_MINUTES = 35;
 const LATITUDE = 15.2;
 const LONGITUDE = 73.7;
 
@@ -54,11 +55,22 @@ export default function OceanExperience({
   const liveMinute = now === null
     ? DEFAULT_MINUTE
     : liveDate.getHours() * 60 + liveDate.getMinutes();
-  const requestedMinute = previewMinute ?? liveMinute;
-  const shownMinute = Math.min(
-    daylightWindow.sunsetMinute,
-    Math.max(daylightWindow.sunriseMinute, requestedMinute),
-  );
+  const shownMinute = previewMinute !== null
+    ? Math.min(
+      daylightWindow.sunsetMinute,
+      Math.max(daylightWindow.sunriseMinute, previewMinute),
+    )
+    : liveMinute < daylightWindow.sunriseMinute
+      ? Math.min(
+        daylightWindow.sunsetMinute,
+        daylightWindow.sunriseMinute + DAYLIGHT_EDGE_OFFSET_MINUTES,
+      )
+      : liveMinute > daylightWindow.sunsetMinute
+        ? Math.max(
+          daylightWindow.sunriseMinute,
+          daylightWindow.sunsetMinute - DAYLIGHT_EDGE_OFFSET_MINUTES,
+        )
+        : liveMinute;
   const dateMs = dateAtMinute(baseDateMs, shownMinute);
 
   return (

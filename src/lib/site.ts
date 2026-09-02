@@ -8,7 +8,7 @@ function resolveSiteUrl(): string {
 }
 
 export const SITE_URL = resolveSiteUrl();
-export const SITE_TITLE = "The Preyam Broadsheet";
+export const SITE_TITLE = "Preyam Rao";
 export const SITE_DESCRIPTION =
   "Software engineer working on prediction markets, AI tools, and low-latency systems.";
 export const AUTHOR = "Preyam Rao";
