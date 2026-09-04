@@ -1,6 +1,6 @@
 # Claude Handoff: Personal Ocean Portfolio
 
-Date: 2026-09-02
+Date: 2026-09-02 (updated after the realism pass)
 
 Project: `/Users/preyam/repo/website`
 
@@ -8,405 +8,376 @@ Primary route: `http://localhost:3017/water`
 
 ## Read This First
 
-Warning: The current `PondSurface.tsx` source contains an incomplete shader edit.
+The ocean renderer is complete and verified after a fresh production build.
 
-Do not treat the active page on port `3017` as the current source result. The server uses an older production bundle from 09:08.
+The server on port `3017` runs `next start` on the current build. Restart it
+after every `npm run build`. The server does not reload a new build by itself.
 
-Complete the uniform setup before you restart the server. The current source will select the WebGL fallback after a new build.
-
-The immediate cause is simple:
-
-- The caustic shader no longer declares `u_seed`.
-- The JavaScript code still requests the `u_seed` location from the caustic program.
-- Both shaders now require wave arrays, but the JavaScript code does not upload those arrays.
-- The display shader now requires `u_displaySunDirection` and `u_windSpeed`, but the JavaScript code does not upload them.
+The previous partial shader edit is finished. All uniforms upload correctly.
+The canvas reports `data-webgl="active"` and `data-quality="full"` in Chrome.
 
 ## User Goal
 
-Build a professional personal website around a realistic ocean simulation. The effect must show technical skill and must not use a video.
+Build a professional personal website around a realistic ocean simulation. The
+effect must show technical skill and must not use a video.
 
-The ocean must feel large, irregular, and natural. The page must move from the surface to underwater and then to the seabed as the user scrolls.
-
-The latest request has three parts:
-
-- Add more random wave motion.
-- Add occasional larger wave sets.
-- Add strong sunlight and a visible solar disc.
+The ocean must feel large, irregular, and natural. The page must move from the
+surface to underwater and then to the seabed as the user scrolls.
 
 ## Fixed User Decisions
 
 Keep these decisions unless the user changes them:
 
-- Use only sunrise through sunset. Do not add the night scene again.
+- The full day is shown, including the night. The user asked for the moon
+  and a night scene on 2026-09-03 after an earlier removal. Keep it physical:
+  the real moon phase, moonlight as the primary light, stars, and twilight.
 - Keep the camera direction fixed as time changes.
 - Do not show half of the first view as sky.
 - Show the sun in a narrow sky band.
 - Keep the ocean motion slow enough to feel heavy.
-- Add more motion than the last valid version had.
 - Avoid obvious sine patterns.
 - Avoid sharp horizon lines and repeated distant detail.
 - Avoid circles, oval boundaries, plane edges, and Snell window artifacts underwater.
+  A look-up "Snell's window" camera beat was built and rejected on 2026-09-02.
+  Do not add it again. The physical window still exists in the refraction
+  math, but the camera never turns up to frame it.
 - Make the ocean look infinite. Do not expose a mesh edge or a corner.
 - Keep the surface-to-underwater change continuous.
 - Keep only three scroll sections.
 - Keep the text minimal and professional.
 - Keep `Work` and `Contact` available throughout the page.
-- Keep a minimal experience section and a short about section.
 - Keep GitHub and LinkedIn links.
 - Do not use Playwright. The user explicitly prohibited it.
 - Keep mobile devices and weak computers functional.
-- Keep pointer ripples disabled for now if they reduce quality or performance.
-
-## Current Page Structure
-
-`src/app/water/page.tsx` defines three sections:
-
-1. The hero shows only `Preyam Rao`.
-2. The work section shows a minimal experience list.
-3. The about section shows a short biography and profile links.
-
-`src/app/water/water.module.css` sets the page height to `300svh`. Each section uses one viewport height.
-
-`OceanExperience.tsx` keeps the canvas fixed behind all three sections. It also shows a small daylight time control.
-
-The experience data is a local draft. No current check confirms that it matches the full LinkedIn profile.
-
-## Current Technical Design
-
-The project uses Next.js 16, React 19, strict TypeScript, and WebGL 2.
-
-`src/components/PondSurface.tsx` contains the complete ocean renderer. It does not use Three.js for this route.
-
-The renderer contains these systems:
-
-- An IWave height solver for local surface detail.
-- A deep-water wave sum for long ocean swells.
-- A ray-marched infinite height field for the visible surface.
-- Fresnel reflection and refraction.
-- A Cox-Munk sun glitter model.
-- A precomputed atmosphere texture.
-- Solar and lunar position data from `src/lib/celestial.ts`.
-- Water absorption, volume light, caustics, and a procedural seabed.
-- A scroll-based camera descent from above the sea to the seabed.
-
-`OceanExperience.tsx` uses the current local date. It clamps a time outside daylight to 35 minutes inside sunrise or sunset.
-
-The slider covers sunrise through sunset. The camera does not change with time.
-
-## Last Valid State
-
-The last valid state existed before the current partial shader edit.
-
-These checks passed at that point:
-
-```bash
-npm test -- --runInBand src/lib/celestial.test.ts src/lib/iwave.test.ts
-npx eslint src/components/PondSurface.tsx src/components/OceanExperience.tsx src/app/water/page.tsx
-npm run build
-```
-
-The two Jest suites had 11 passing tests.
-
-A direct headless Chrome capture also showed a valid WebGL frame. That check did not use Playwright.
-
-## Changes That Already Exist
-
-The current worktree includes many user changes. Do not revert unrelated files.
-
-The last valid ocean changes include:
-
-- `SIMULATION_PLAYBACK_RATE` is `0.60`.
-- `OCEAN_WAVE_HEIGHT_SCALE` is `1.18`.
-- Full quality uses 60 frames per second and a 1,700,000 pixel budget.
-- Reduced quality uses 30 frames per second and a 400,000 pixel budget.
-- Reduced quality uses a 112 by 112 IWave grid.
-- Full quality uses a 192 by 192 IWave grid.
-- Caustic work uses lower texture sizes and lower update rates than the first version.
-- The horizon filter removes fine wave detail near the horizon.
-- The render loop stops when the canvas leaves the viewport.
-- Reduced motion stops the ocean time and solver updates.
-
-The current partial edit adds these changes to `PondSurface.tsx`:
-
-- `OCEAN_WAVE_COMPONENT_COUNT` is `9`.
-- `CAMERA_TARGET_TOP` changed from `[0, -0.05, 0.7]` to `[0, 1.8, 0.7]`.
-- Both shaders now declare `u_waveData[9]` and `u_wavePhase[9]`.
-- Both shaders now use `spectralOceanHeight()` instead of seven fixed wave calls.
-- The display shader now declares `u_displaySunDirection`.
-- The display shader now declares `u_windSpeed`.
-- The Cox-Munk slope value now uses `u_windSpeed`.
-- The sun glitter scale changed from `0.28` to `0.36`.
-- Direct solar light changed by a factor of `1.32`.
-- The visible solar disc changed from `30.0` to `46.0`.
-- The solar bloom changed from `2.8` to `4.6`.
-- A broad solar aureole now uses a scale of `0.52`.
-- Direct sky rays request the display sun direction.
-- Reflection and underwater rays still request the physical sun direction.
-
-## Complete the Spectral Wave Field
-
-Create one seeded wave field on the CPU. Upload the same field to the caustic and display programs.
-
-Use this data format for each wave:
-
-```text
-[waveVectorX, waveVectorZ, angularFrequency, amplitude]
-```
-
-Use a separate phase array.
-
-Use these equations:
-
-```text
-k = 2 * PI / wavelength
-waveVector = direction * k
-angularFrequency = sqrt(9.81 * k)
-```
-
-Use the first two components as a close long-swell pair. Give the pair close wavelengths and nearly equal directions.
-
-The pair will produce a slow beat. The beat will create occasional larger wave sets without a timer or a random amplitude jump.
-
-Use the other seven components for the local sea state. Add seed-based variation to wavelength, direction, phase, and amplitude.
-
-A suitable base set is:
-
-```text
-wavelengths: 11, 15, 21, 30, 43, 61, 92 meters
-amplitudes:  0.010, 0.014, 0.019, 0.024, 0.030, 0.028, 0.023 meters
-```
-
-Use a long-swell base wavelength between 72 and 96 meters. Use pair amplitudes near `0.075` and `0.064` meters.
-
-Use `seededRandom()` for all variation. Keep the session seed stable across a reload.
-
-Return this object from a new `createOceanWaveField(seed)` function:
-
-```ts
-{
-  data: Float32Array;
-  phases: Float32Array;
-  windSpeed: number;
-}
-```
-
-Use a wind speed between 5.8 and 7.6 meters per second. The Cox-Munk model will use this value.
-
-In `createPondEngine()`:
-
-1. Create the wave field once.
-2. Get `u_waveData[0]` and `u_wavePhase[0]` from both programs.
-3. Upload the arrays with `uniform4fv()` and `uniform1fv()`.
-4. Upload `u_windSpeed` to the display program.
-5. Remove the caustic `u_seed` lookup and upload.
-6. Keep the display `u_seed` because volume noise and the underwater camera use it.
-
-Program uniforms keep their values after a program switch. Upload the static wave data once after the links complete.
-
-## Make the Sun Visible
-
-The fixed rectilinear camera cannot show the complete daily solar path inside a narrow sky band. A high midday sun and a low sunset sun do not fit the same narrow view.
-
-Use a fixed panoramic sky projection for the direct solar disc. Keep all water light on the true physical solar direction.
-
-Add a CPU helper that maps the true solar state into the narrow sky band:
-
-```text
-displayAzimuth = sun.hourAngle * 0.32
-normalizedElevation = clamp(sun.elevation / (PI / 2), 0, 1)
-displayElevation = radians(0.8 + 3.7 * sqrt(normalizedElevation))
-```
-
-Build the display direction with this coordinate rule:
-
-```text
-x = sin(displayAzimuth) * cos(displayElevation)
-y = sin(displayElevation)
-z = cos(displayAzimuth) * cos(displayElevation)
-```
-
-Upload the result to `u_displaySunDirection`.
-
-Keep these uses separate:
-
-- Direct sky view: use `u_displaySunDirection` for the disc and aureole.
-- Atmosphere attenuation: use the true `u_sunDirection`.
-- Water reflection: use the true `u_sunDirection`.
-- Cox-Munk glitter: use the true `u_primaryLightDirection`.
-- Underwater transmission: use the true `u_sunDirection`.
-- Caustics and volume rays: use the true primary light direction.
-
-This choice keeps the camera fixed. It also keeps the water optics tied to the computed solar position.
-
-Warning: The visible disc position is a panoramic presentation, not a pinhole-camera projection. Do not call its screen position fully physical.
-
-## Visual Quality Rules
-
-Reject the result if you see one of these defects:
-
-- A repeated diagonal wave lattice.
-- Even wave spacing across the full screen.
-- A noisy or dotted horizon.
-- A sharp line between the sky and the sea.
-- A sharp line between the surface and underwater.
-- A circle or oval around the underwater sky.
-- A visible water plane edge.
-- A visible caustic texture boundary.
-- Fast camera drift when time changes.
-- A large sky area in the first view.
-- A yellow overlay that does not follow a reflection path.
-- A sun disc without a reflection response.
-
-Keep the narrow sky band near 14 percent of the first viewport. The new `CAMERA_TARGET_TOP` value targets this composition.
-
-Keep direct solar light bright enough to clip at the disc center. Keep the surrounding sky and water below broad white clipping.
-
-Use the real surface normals for glitter. Do not add a screen-space sparkle texture.
-
-## Underwater Rules
-
-The underwater view uses three surface-normal samples to soften the Snell boundary. Keep that soft average.
-
-Do not add a hard critical-angle mask. Do not draw a circular Snell window.
-
-The ray field must continue to infinity. Use the current height-field intersection and horizon detail fade.
-
-The final scroll position must reveal the seabed. Do not show a finite ocean box.
-
-## Performance Rules
-
-Do not add a video, a large texture, a geometry ocean mesh, or a new runtime dependency.
-
-Keep these controls:
-
-- The pixel budget limits the canvas size.
-- Device memory and CPU count select the reduced profile.
-- A coarse pointer selects the reduced profile.
-- Data saver selects the reduced profile.
-- Reduced motion stops the simulation.
-- The intersection observer stops work off screen.
-- The atmosphere texture updates only when the light signature changes.
-- The caustic texture updates less often than the display frame.
-
-The nine-wave shader loop costs more sine operations than the old seven-wave loop. The CPU now supplies wave numbers and frequencies, so the shader removes repeated trigonometric setup.
-
-Test the full and reduced profiles. Do not raise the reduced pixel budget without device evidence.
+- Keep pointer ripples disabled.
+- Do not commit or push without exact permission from the user.
+
+## Files
+
+- `src/lib/oceanWaves.ts`: the seeded wave field, the sea-state summary, and
+  the sun mapping helpers. Pure functions with tests in `oceanWaves.test.ts`.
+- `src/components/PondSurface.tsx`: the WebGL 2 renderer. Five programs:
+  IWave simulation, caustics, atmosphere, clouds, and display.
+- `src/components/OceanExperience.tsx`: the session seed, the daylight time
+  control, and the sea-state readout.
+- `src/app/water/page.tsx` and `water.module.css`: the three sections.
+
+## Wave Field
+
+`createOceanWaveField(seed)` returns nine deep-water components:
+
+- Three swell components. The base wavelength is 72 to 96 meters. The other
+  two use ratios near 0.79 and 0.62. The three nearly aligned components beat
+  and produce wave sets of four to five waves.
+- Six wind-sea components between 7 and 40 meters. Each uses a steepness
+  between 0.022 and 0.038, capped at 0.07 meters of amplitude.
+
+The shader applies Gerstner choppiness (`u_choppiness` = 1.7) with the
+inverse-displacement trick `h(p - lambda * D(p))`. The surface stays a height
+field, so the ray march never sees a fold.
+
+Each component fades with view distance at 9 to 26 wavelengths. The local
+IWave tile fades between 45 and 190 meters. The horizon shows only the long
+swell, so distant detail never repeats.
+
+The significant wave height is 0.55 to 0.75 meters. The wind speed is 5.8 to
+7.6 meters per second. The seed is stable for one browser session.
+
+## Night Scene
+
+The time control spans the full day. The live clock is not clamped. The
+celestial state selects the primary light: the sun while its strength is above
+zero, then the moon with a phase-scaled strength up to 0.03.
+
+- The moon uses the same two mappings as the sun: a scene direction with the
+  true elevation and a compressed azimuth for light, and a display direction
+  in the sky band for the disc and the glitter path.
+- `moonPhaseLight` is the true sun direction rotated by the same azimuth
+  offset as the moon, so the disc shows the real phase and terminator.
+- The moon disc is a lit sphere with limb darkening and earthshine. Its
+  brightness is about 1/77 of the sun disc before exposure.
+- Stars: two hash layers in a latitude and longitude grid, 1 to 2 pixel
+  cores, twinkle, warm and cool tints, and a faint galactic band. They fade
+  in when the sun drops below 3.4 degrees, fade at the horizon, and are
+  occluded by clouds. Reflections carry 40 percent of their radiance.
+- Twilight: a warm glow near the horizon toward the sun between 0 and 20
+  degrees of depression, turning violet as the sun sinks.
+- Night sky floor: airglow plus a lunar sky term scaled by the moon
+  illumination. The horizon haze uses the same background, so the sea meets
+  the sky without a line at night.
+- Clouds take moonlight in the cloud pass and cast their alpha over the moon.
+- Exposure rises to 6.4 above water and 6.2 below when the sun is 17 degrees
+  down. A moonless night still shows a faint sea texture and star glints.
+
+## Sun Mapping
+
+The camera never turns. Two helpers compress the daily solar path:
+
+- `getSceneSunDirection()` keeps the physical elevation and compresses the
+  azimuth by `hourAngle * scale`. Every light computation uses this direction:
+  the atmosphere texture, transmittance, underwater light, and caustics.
+- `getDisplaySunDirection()` uses the same azimuth and a presentation
+  elevation between 0.8 and 4.5 degrees. The visible disc and the Cox-Munk
+  glitter use this direction, so the glitter path always leads to the disc.
+
+`getSunAzimuthScale()` derives the scale from the canvas aspect. The disc
+stays inside the frame on a phone and stays clear of the top-right nav.
+
+Warning: the disc position and the glitter path are a presentation. The
+colors, the sky, and the underwater light use the physical elevation.
+
+## Renderer Systems
+
+- Ray march: bracket the surface between the crest and trough planes with
+  seven steps, then five bisections and one false-position step.
+- Normals: central differences with a step that grows with distance.
+- Glitter: Cox-Munk with a sub-pixel slope variance of `0.0025 + 0.0016 U`.
+  Two layers of drifting value-noise slopes add capillary sparkle inside
+  260 meters.
+- Subsurface scattering: a turquoise term on crests that face the viewer with
+  the sun behind them. It grows when the sun is low.
+- Foam: the Jacobian of the horizontal displacement. Foam starts below 0.855
+  and saturates at 0.79. That covers the top 0.3 to 1 percent of the surface.
+  Wind streak noise adds faint lines on high crests.
+- Sky: the atmosphere texture stays unchanged. A second panoramic texture
+  composites two procedural cloud layers over it: cumulus fragments at 1.9
+  kilometers and wind-stretched cirrus at 8 kilometers. The alpha channel
+  shades the sun disc. The texture updates every 3 display frames at full
+  quality and every 8 at reduced quality.
+- Haze: distant water blends toward the horizon sky. The horizon band also
+  blends within 1.6 degrees of the horizon.
+- Marine snow: four screen-aligned particle layers at 0.9, 2.1, 4.6, and 9.5
+  meters. Cells live on a plane perpendicular to the camera, so a speck never
+  crosses a cell border. Near specks are soft bokeh and far specks are sharp.
+- Seabed: 24 meters deep with silt, ripples, stones, and shells. The camera
+  ends 2.8 meters above it.
+- Tone mapping: ACES filmic, a light vignette, and a one-bit dither.
+
+## Debug Views
+
+Add a query parameter to the route:
+
+- `?ocean-debug=sky`: the composited sky texture over a 90 degree arc.
+- `?ocean-debug=cloud`: the cloud alpha channel.
+- `?ocean-debug=foam`: the foam mask in red on the water.
+- `?ocean-quality=reduced` or `full`: force a quality profile.
+- `?ocean-scale=1`: force the render scale, which disables the controller.
+  Use it to measure the true GPU cost.
+- `?ocean-debug=fps`: a top-left readout with the draw rate, the
+  requestAnimationFrame rate, the worst frame gap, the slow-draw count, the
+  render scale, the canvas size, and the scroll value. It refreshes once per
+  second. On a 120 hertz display expect about 60 draws and 120 callbacks.
+
+## Camera Path
+
+The scroll value drives four stages:
+
+1. `entry` (0 to 0.205): the camera drops from 3.6 meters above the sea to the
+   waterline and the focal length widens from 2.7 to 1.3.
+2. The crossing: within 0.12 meters of the local surface the shader renders
+   both paths and crossfades them. The CPU predicts this band from the
+   spectral surface height and lowers the render scale to 0.8 ahead of time.
+3. `deepDescent` (0.19 to 0.96): the descent to 21.2 meters with a slow sway.
+4. `floorView` (0.58 to 0.96): the pitch down to the seabed.
+
+`getCameraPosition()` in `PondSurface.tsx` mirrors the shader origin path. Keep
+the two in step when you change either.
+
+## Frame Pacing
+
+The render loop throttles to the profile frame interval with a 2.5
+millisecond tolerance. Without the tolerance, a requestAnimationFrame
+timestamp a hair under 16.667 milliseconds skipped a draw, and a 120 hertz
+display produced an irregular 17 and 25 millisecond cadence.
+
+A render-scale controller multiplies the canvas size by a factor between
+0.55 and 1. It uses a moving average of the drawn frame gaps. Fifteen frames
+above 1.22 times the interval lower the scale by 14 percent. One hundred and
+twenty calm frames raise it by 5 percent. The first 45 frames are ignored,
+because the GPU process warms up. The canvas exposes `data-render-scale`,
+`data-drawn-frames`, `data-slow-draws`, and `data-draw-gap-max` for checks.
+
+## Quality Profiles
+
+Full: 1,700,000 pixel budget, 60 frames per second, 192 IWave grid, 768 by
+256 cloud texture, four snow layers.
+
+Reduced: 400,000 pixel budget, 30 frames per second, 112 IWave grid, 384 by
+128 cloud texture, two snow layers, fewer cloud octaves.
+
+A coarse pointer, reduced motion, four or fewer cores, four or fewer
+gigabytes, or data saver selects the reduced profile.
+
+Measured on this Mac (Apple M5, headless Chrome on Metal, 1618 by 1051 canvas,
+full profile, render scale forced to 1): 60 frames per second with zero slow
+draws at the surface, at the crossing, under the surface, in the work
+section, and at the seabed. A scroll sweep from top to seabed drops no frame.
+
+History of the stutter fix on 2026-09-02:
+
+- The surface crossing cost 52 milliseconds per frame because both render
+  paths ran for every pixel. The band shrank from 0.22 to 0.12 meters and the
+  dual state now halves the volume samples and normals.
+- The frame throttle skipped draws on timestamp jitter. See Frame Pacing.
+- The underwater volume march used two four-octave noise fields per sample.
+  One field plus a single-octave field looks the same and costs half.
+- The underwater view within 8 meters of the surface uses three volume
+  samples, and short ray brackets use five march steps.
 
 ## Browser Check Without Playwright
 
-Build first. Then start the production server on port `3017`.
+The scratchpad script drives headless Chrome over the raw DevTools protocol.
+It sets the time slider, scrolls, and captures PNG frames. Recreate it from
+this description if the scratchpad is gone:
 
-```bash
-npm run build
-npm start -- --port 3017
-```
+1. Start Chrome with `--headless=new --remote-debugging-port=<port>`.
+2. `PUT /json/new?about:blank`, then open the returned WebSocket.
+3. `Page.navigate`, wait for load, then `Runtime.evaluate` to set the range
+   input through the native value setter and dispatch an `input` event.
+4. `window.scrollTo` to a fraction of the page height, wait 10 seconds for the
+   scroll smoothing, then `Page.captureScreenshot`.
 
-Use direct Chrome for a static WebGL check:
+Use `--use-angle=swiftshader` for a software check. Omit it to measure the
+real GPU.
 
-```bash
-profile_dir="$(mktemp -d /private/tmp/water-check.XXXXXX)"
-'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
-  --headless=new \
-  --hide-scrollbars \
-  --window-size=1440,900 \
-  --force-device-scale-factor=1 \
-  --use-angle=swiftshader \
-  --enable-unsafe-swiftshader \
-  --disable-background-networking \
-  --disable-component-update \
-  --disable-sync \
-  --disable-extensions \
-  --no-first-run \
-  --no-default-browser-check \
-  --run-all-compositor-stages-before-draw \
-  --timeout=8000 \
-  --user-data-dir="$profile_dir" \
-  --screenshot=/private/tmp/water-sun.png \
-  http://127.0.0.1:3017/water
-```
-
-This check proves that the shaders compile and draw. It does not prove native graphics performance or smooth motion.
-
-Also inspect a mobile layout. Use direct Chrome or the in-app browser. Do not use Playwright.
-
-## Validation Order
-
-Run these checks after the implementation:
+## Validation
 
 ```bash
 git diff --check
-npm test -- --runInBand src/lib/celestial.test.ts src/lib/iwave.test.ts
-npx eslint src/components/PondSurface.tsx src/components/OceanExperience.tsx src/app/water/page.tsx
+npm test -- --runInBand src/lib/celestial.test.ts src/lib/iwave.test.ts src/lib/oceanWaves.test.ts
+npx eslint src/components/PondSurface.tsx src/components/OceanExperience.tsx src/lib/oceanWaves.ts src/app/water/page.tsx
 npm run build
 ```
 
-Then capture at least these views:
+All four passed on 2026-09-02 with 21 tests.
 
-1. The first view at sunrise.
-2. The first view near noon.
-3. The first view near sunset.
-4. The surface-to-underwater transition.
-5. The second section underwater.
-6. The final seabed view.
-7. One narrow mobile view.
+Captured and reviewed on 2026-09-02: morning, noon, and sunset first views;
+the surface crossing at scroll 0.2; the view under the surface at 0.3; the
+work section at 0.5; the seabed at 1.0; the foam debug view; the reduced
+profile; and a 430 by 860 mobile view.
 
-Check two frames at different times to confirm that the wave field moves and the camera does not move.
+Captured and reviewed on 2026-09-03 for the night scene: a moonless night at
+23:00, a moonlit night at 02:00 with the moon 47 degrees up at 66 percent,
+nautical twilight at 19:10, and dawn at 05:30 with the moon 79 degrees up.
+Underwater at 02:00 and 23:00 at scroll 0.5 and 1.0.
 
-## Git State
+Frame timing uses a second DevTools-protocol script. It records every
+requestAnimationFrame gap for four seconds at each scroll position and reads
+the canvas draw statistics. Run it on an idle machine. A busy foreground
+Chrome tab shares the GPU and doubles every number.
 
-Current branch: `main`
+## Known Limits
 
-Current head: `4220520 fix: filter distant ocean detail`
-
-Recent local commits:
-
-```text
-4220520 fix: filter distant ocean detail
-a4f401a feat: add procedural ocean portfolio
-9375096 chore: save workspace state
-82885bf fix: update vulnerable website dependencies
-```
-
-The worktree is dirty. It includes changes outside the ocean route.
-
-Do not reset, discard, or overwrite those changes. Do not commit or push unless the user gives exact permission.
+- The whitecap coverage is sparse by design. Real seas at this wind speed
+  show foam on less than one percent of the surface.
+- The seabed at 24 meters is monochrome blue. Water absorption removes red and
+  green before the light reaches the floor.
+- The cloud layers drift slowly. A viewer sees motion after about a minute.
+- The visible disc elevation is not a pinhole projection of the real sun.
+- The render-scale controller reacts after about 15 slow frames. A weak GPU
+  shows a quarter second of stutter before the scale drops.
 
 ## Primary Physics Sources
 
-Use primary or authoritative sources for physics decisions:
+- Jerry Tessendorf, `Simulating Ocean Water`.
+- Cox and Munk, `Slopes of the Sea Surface Deduced from Photographs of Sun Glitter`.
+- NASA, `The Subtleties of Sunglint`.
+- NOAA, `Wave Groups in Surface Gravity Waves`.
+- Monahan and O'Muircheartaigh, whitecap coverage versus wind speed.
 
-- Jerry Tessendorf, `Simulating Ocean Water`: https://evasion.inrialpes.fr/Membres/Fabrice.Neyret/NaturalScenes/fluids/water/waves/fluids-nuages/waves/Jonathan/articlesCG/simulating-ocean-water-01.pdf
-- Cox and Munk, `Slopes of the Sea Surface Deduced from Photographs of Sun Glitter`: https://escholarship.org/content/qt1p202179/qt1p202179_noSplash_f892a85da053aa23dcf8afac03342764.pdf?t=krnrdb
-- NASA, `The Subtleties of Sunglint`: https://science.nasa.gov/earth/earth-observatory/the-subtleties-of-sunglint-151456/
-- NASA NTRS, `Sun Glint and the Ocean`: https://ntrs.nasa.gov/api/citations/20000056100/downloads/20000056100.pdf
-- NOAA, `Wave Groups in Surface Gravity Waves`: https://repository.library.noaa.gov/view/noaa/44996/noaa_44996_DS1.pdf
-- NASA GISS solar angular radius data: https://data.giss.nasa.gov/modelE/ar5plots/srlocat.html
-- NASA Dark Target ocean surface model: https://darktarget.gsfc.nasa.gov/atbd-ocean-algorithm
+## 2026-09-04 update: underwater chop, dusk blackout, decay, dial
 
-The useful conclusions are:
+### Underwater "choppy" feel (fixed)
+The frame rate was a steady 60 fps. The picture was not. Two discrete cadences
+made the underwater scene jump:
 
-- Many components with random phases and deep-water dispersion hide simple sine patterns.
-- Close frequencies produce wave groups through interference.
-- Surface roughness spreads sun glitter across many facets.
-- Direct sunlight can exceed the display range at the disc center.
-- Reflection, refraction, atmospheric loss, and water absorption must use the physical light direction.
+- The caustic map only re-rendered every 4 solver steps (about 9 Hz). Every
+  light shaft and floor pattern jumped at that rate.
+- The IWave tile advanced 36 steps per second with no interpolation, so the
+  near-field surface moved in a 2-1 stutter pattern.
 
-## Completion Standard
+Fixes in `PondSurface.tsx`:
 
-Do not stop after a successful build.
+- `stateHeight()` blends `.g` (previous step) and `.r` (current step) of the
+  solver texture with `u_stateBlend = accumulator / FIXED_TIME_STEP`. Both the
+  display and caustic programs use it. `causticRevisionStride` is gone.
+- The caustic map renders every frame with one light direction, then a
+  four-tap half-texel blur (`causticBlurFragmentShader`) into `causticTarget`.
+  The five-direction sun disc was a sub-texel jitter (0.6 texel at 24 m), so
+  the blur gives the same softness at a fifth of the vertex work.
 
-Complete the task only when all of these statements are true:
+Verified with `scratchpad/motion.mjs` (per-frame image difference of a
+320x200 centre block): the min/max ratio of neighbouring frame differences
+went from 0.05 to 0.85-0.95 underwater.
 
-- WebGL stays active after a fresh production build.
-- The sun appears in the first view.
-- The sun moves left to right as daylight time changes.
-- The camera angle stays fixed as daylight time changes.
-- The water reflection uses the physical solar direction.
-- Wave motion does not show a simple repeated pattern.
-- Larger swells arrive as gradual sets.
-- The horizon stays soft.
-- The underwater view has no hard circle, line, side, or corner.
-- The three page sections stay readable on desktop and mobile.
-- The reduced profile keeps its limits.
-- The targeted tests, lint, and production build pass.
+### Black upper half at dusk and night (fixed)
+Mid-water, the sky seen through the surface from below went NaN once twilight
+terms switched on. Rays under total internal reflection get a zero refracted
+vector, `atmosphere()` turns that into the exact zenith, and the star hash
+runs `atan(0, 0)`. Zero transmission times NaN stays NaN, so the whole upper
+half (every upward ray) rendered black with a hard edge at the horizon and no
+marine snow. Reproduced at 19:00 and 23:30, scroll 0.6, with
+`scratchpad/probe.mjs`. Fix: `renderBelowWaterSurface` skips the sky lookup
+when the refracted direction is zero. `isnan()` is unreliable under Metal
+fast-math; a `floatBitsToUint` exponent test found it.
 
+### Tile decay (fixed)
+Solver damping (0.16) removed all tile energy with a 21 s time constant, so
+the near-field texture vanished within two minutes. The solver now forces its
+64 strongest modes every step: `nextHeight += 2 * damping * dt * target`.
+A forcing of twice the damping holds a resonant mode at exactly its target
+amplitude (checked with a one-mode simulation) and leaves other modes alone.
+Each mode's frequency comes from the solver kernel eigenvalue
+(`solverFrequency` in `createInitialState`), not from the deep-water formula;
+with the analytic frequency the forcing sat off resonance and held nothing.
+Surface motion per millisecond is the same at 100 s as at 3 s.
+
+### Time dial
+The range slider is gone. `SkyClock` in `OceanExperience.tsx` is a 24 hour
+SVG dial: noon at the top, midnight at the bottom, the day arc from sunrise
+to sunset, a hand for the shown time. Drag anywhere on the dial to preview a
+time; arrows step 5 minutes, PageUp/PageDown step an hour, Home returns to
+live. `src/lib/skyClock.ts` holds the pure geometry with tests. Scripts drive
+it with real mouse events (`Input.dispatchMouseEvent` in `shoot.mjs`), because
+`setPointerCapture` rejects synthetic pointer ids.
+
+### Measurement notes
+- Frame timing is only valid on an idle machine. A Rust build plus a prover
+  job at load 11 doubled every number.
+- `shoot.mjs` used SwiftShader (CPU) until today. It now uses the GPU.
+- A `readPixels` stall each frame inflates GPU time because the GPU clocks
+  down between frames. Use it for image metrics, not for cost.
+
+### Weak hardware: measured tiers (2026-09-04, `scratchpad/weak.mjs`)
+| Tier | Setup | Result |
+|---|---|---|
+| This Mac (M5), full profile | 1.7 MP canvas | 60 fps; seabed and surface hold scale 1.0, mid-water (scroll 0.3-0.6) settles at scale 0.8-0.9 under load |
+| Phone, real GPU | 390x844 at DPR 3, coarse pointer → reduced profile | 0.4 MP canvas (430x930), 30 fps target met at every scroll, zero slow frames |
+| Desktop, no GPU (SwiftShader), full profile, old controller | 1470x830 | 1.0 fps, scale never dropped (frame-counted timers) |
+| Desktop, no GPU, reduced profile via URL | 842x475 | 2.5-3 fps |
+| Desktop, no GPU, full profile, new controller + fall-back | | floor scale in 4 s, reduced profile at 10 s, then 6-7 fps at 463x261 |
+
+Software rendering is the floor, not a real target: any integrated GPU is
+10-50x faster than SwiftShader. Rough expectation for an old Intel UHD laptop
+(about 10x slower than the M5): full profile at scale 1 is ~120-150 ms a
+frame, the controller reaches the floor (0.3x pixels) in seconds, and the
+fall-back to the reduced profile lands it near 25-35 fps at about 0.12 MP.
+That is an estimate from throughput ratios, not a measurement.
+
+### Controller and fall-back (rewritten 2026-09-04)
+- All timers are milliseconds: warm-up 2.5 s (and 8 frames), slow confirm
+  0.5 s, hold 0.9 s after a drop, 1.2 s after a raise, raise after 2.5 s calm.
+  Drop when the smoothed gap exceeds 1.10x the frame interval, raise when it
+  stays under 1.03x. The first drop is proportional to the measured gap
+  (`sqrt(0.92 * interval / gap)`, at most 0.86), so a 1 s frame goes straight
+  to the 0.55 floor.
+- If the floor is still slow for 2.5 s, the effect re-runs with
+  `REDUCED_QUALITY` (`qualityFallback` state). The cleanup must not lose the
+  WebGL context in that case (`keepContext`), or the replacement engine dies
+  with "floating-point color buffers are unavailable". The re-creation costs a
+  few seconds on a slow CPU (initial solver state).
+- The scene renders into `sceneTarget`, an RGBA8 framebuffer the size of the
+  canvas, and `blitFramebuffer` copies the scaled sub-rectangle to the
+  screen. Scale changes no longer reallocate the canvas: transition frames
+  went from 90 ms to under 25 ms. `u_resolution` is the sub-rectangle size.
+- The fps overlay (`?ocean-debug=fps`) shows the render size, not the canvas.
