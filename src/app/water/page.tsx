@@ -12,11 +12,11 @@ const experience = [
     company: "AlphaFi",
     role: "Software Engineer",
     period: "Feb 2026 - Now",
-    summary: "I build DeFi systems on Sui.",
+    summary: "I build and audit DeFi systems across Sui Move contracts, protocol infrastructure, and production releases.",
     url: "https://www.linkedin.com/company/alphafisui",
   },
   {
-    company: "Independent",
+    company: "Stealth",
     role: "Founder",
     period: "Jun 2025 - Jan 2026",
     summary: "I received a $140K grant to build a social platform with SuiNS.",
@@ -30,8 +30,15 @@ const experience = [
     url: "https://www.linkedin.com/company/oracle",
   },
   {
+    company: "Oracle",
+    role: "Software Engineering Intern",
+    period: "May 2022 - Jul 2022",
+    summary: "I built an Oracle Digital Assistant chatbot that classified requests, retrieved build history and test results, and submitted Jenkins jobs.",
+    url: "https://www.linkedin.com/company/oracle",
+  },
+  {
     company: "Krishi Network",
-    role: "Software Engineer",
+    role: "Software Engineering Intern",
     period: "Jun 2021 - Jul 2021",
     summary: "I built a multilingual classifier for more than 17,000 farmer questions.",
     url: "https://www.linkedin.com/company/krishi-network",
@@ -42,6 +49,7 @@ const contactLinks = [
   { label: "GitHub", url: "https://github.com/preyam2002" },
   { label: "LinkedIn", url: "https://www.linkedin.com/in/preyam" },
   { label: "Codeforces", url: "https://codeforces.com/profile/preyam" },
+  { label: "Email", url: "mailto:preyam2002@gmail.com" },
 ];
 
 export default function WaterConcept() {
@@ -88,12 +96,18 @@ export default function WaterConcept() {
           <h2 id="about-title">About</h2>
           <div className={styles.aboutCopy}>
             <p>
-              I am an engineer from IIT Kharagpur. I work on DeFi, distributed systems,
-              security, and applied machine learning.
+              I am Preyam, a software engineer. I build secure financial systems, from
+              Sui smart contracts to distributed cloud services.
             </p>
             <p>
-              Before AlphaFi, I built cloud services at Oracle. I am also a Codeforces
-              Candidate Master.
+              I earned a B.Tech in Electrical Engineering with a minor in Computer
+              Science from IIT Kharagpur in 2023. I am also a Codeforces Candidate
+              Master.
+            </p>
+            <p className={styles.aboutPersonal}>
+              Outside work, I solve Rubik’s Cubes, fold origami, read, and watch films
+              and anime. I study languages, practice piano, play badminton, run, lift
+              weights, and swim.
             </p>
           </div>
 

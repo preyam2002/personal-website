@@ -18,11 +18,13 @@ import {
   getDisplaySunDirection,
   getSceneSunDirection,
   getSessionOceanSeed,
+  getStarFieldTransform,
   getSunAzimuthScale,
   rotateAboutY,
   seededRandom,
   spectralHeightAt,
   type Direction3,
+  type Matrix3,
   type OceanWaveField,
 } from "@/lib/oceanWaves";
 
@@ -265,10 +267,10 @@ void main() {
     vec4 b = u_drive[group * 4 + 1];
     vec4 c = u_drive[group * 4 + 2];
     vec4 d = u_drive[group * 4 + 3];
-    target += a.w * cos(dot(a.xy, v_uv) + phases.x + a.z * u_simulationTime)
-      + b.w * cos(dot(b.xy, v_uv) + phases.y + b.z * u_simulationTime)
-      + c.w * cos(dot(c.xy, v_uv) + phases.z + c.z * u_simulationTime)
-      + d.w * cos(dot(d.xy, v_uv) + phases.w + d.z * u_simulationTime);
+    target += a.w * cos(dot(a.xy, v_uv) + phases.x - a.z * u_simulationTime)
+      + b.w * cos(dot(b.xy, v_uv) + phases.y - b.z * u_simulationTime)
+      + c.w * cos(dot(c.xy, v_uv) + phases.z - c.z * u_simulationTime)
+      + d.w * cos(dot(d.xy, v_uv) + phases.w - d.z * u_simulationTime);
   }
   nextHeight += 2.0 * u_damping * u_deltaTime * target;
 
@@ -754,7 +756,9 @@ void main() {
   float highDistance = 8000.0 / direction.y;
   vec2 highPlane = direction.xz * highDistance * 0.001;
   vec2 highLocal = vec2(dot(highPlane, u_wind), dot(highPlane, windPerpendicular));
-  highLocal += vec2(u_time * 0.011, u_time * 0.0015) + seedOffset * 0.7;
+  highLocal = highLocal
+    - vec2(u_time * 0.011, u_time * 0.0015)
+    + seedOffset * 0.7;
   highLocal.x *= 0.22;
   float wisps = cloudFbm(highLocal * 0.75, octaves);
   float wispDensity = smoothstep(0.52, 0.78, wisps)
@@ -764,7 +768,7 @@ void main() {
 
   float lowDistance = 1900.0 / direction.y;
   vec2 lowPlane = direction.xz * lowDistance * 0.001;
-  vec2 lowPoint = lowPlane * 0.62 + u_wind * u_time * 0.0032 + seedOffset;
+  vec2 lowPoint = lowPlane * 0.62 - u_wind * u_time * 0.0032 + seedOffset;
   float density = cumulusShape(lowPoint, octaves);
   vec2 towardSun = normalize(lightDirection.xz + vec2(0.0001))
     * (0.06 + 0.10 * (1.0 - clamp(lightDirection.y, 0.0, 1.0)));
@@ -802,7 +806,6 @@ uniform float u_scroll;
 uniform vec3 u_sunDirection;
 uniform vec3 u_displaySunDirection;
 uniform vec3 u_primaryLightDirection;
-uniform vec3 u_displayLightDirection;
 uniform vec3 u_moonDirection;
 uniform vec3 u_displayMoonDirection;
 uniform vec3 u_moonPhaseLight;
@@ -812,6 +815,7 @@ uniform float u_moonIllumination;
 uniform float u_moonStrength;
 uniform float u_primaryIsMoon;
 uniform float u_primaryLightStrength;
+uniform mat3 u_starTransform;
 uniform float u_oceanTime;
 uniform float u_seed;
 uniform float u_windSpeed;
@@ -875,7 +879,7 @@ vec3 coxMunkSunGlitter(
     beckmannMasking(normalLight, roughness);
   float fresnel = dielectricFresnel(max(dot(viewDirection, halfway), 0.0));
   float reflectedIrradiance = fresnel * distribution * masking / (4.0 * normalView);
-  return sunColor * reflectedIrradiance * 0.36;
+  return sunColor * reflectedIrradiance * 0.20;
 }
 
 vec3 primaryLightRadiance() {
@@ -887,7 +891,11 @@ vec3 primaryLightRadiance() {
 
 vec3 starField(vec3 direction, float night, float cloudAlpha) {
   if (night <= 0.001 || direction.y <= 0.0) return vec3(0.0);
-  vec2 sky = vec2(atan(direction.x, direction.z), asin(clamp(direction.y, -1.0, 1.0)));
+  vec3 catalogDirection = u_starTransform * direction;
+  vec2 sky = vec2(
+    atan(catalogDirection.x, catalogDirection.z),
+    asin(clamp(catalogDirection.y, -1.0, 1.0))
+  );
   vec3 total = vec3(0.0);
   for (int layer = 0; layer < 2; layer += 1) {
     float scale = layer == 0 ? 14.0 : 26.0;
@@ -907,7 +915,7 @@ vec3 starField(vec3 direction, float night, float cloudAlpha) {
     total += tint * core * (0.05 + 0.7 * magnitude) * twinkle;
   }
   vec3 bandNormal = normalize(vec3(0.42, 0.62, 0.66));
-  float bandDistance = abs(dot(direction, bandNormal));
+  float bandDistance = abs(dot(catalogDirection, bandNormal));
   float band = exp(-bandDistance * bandDistance * 26.0);
   float bandTexture = noise21(sky * 9.0 + 3.1) * 0.6 + noise21(sky * 21.0 - 5.7) * 0.4;
   total += vec3(0.010, 0.012, 0.016) * band * (0.35 + 0.65 * bandTexture);
@@ -1441,6 +1449,12 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
     horizonDetail
   ));
   vec3 sunColor = primaryLightRadiance();
+  float sunLuminance = dot(sunColor, vec3(0.2126, 0.7152, 0.0722));
+  vec3 waterHighlightColor = mix(
+    sunColor,
+    vec3(sunLuminance),
+    (1.0 - u_primaryIsMoon) * 0.16
+  );
   vec3 reflectedDirection = reflect(ray, normal);
   vec3 reflected = atmosphere(reflectedDirection, 0.0);
   vec3 refractedDirection = refract(ray, normal, 1.0 / WATER_IOR);
@@ -1454,7 +1468,7 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
   vec3 color = mix(refracted, reflected, fresnel);
 
   float crest = smoothstep(0.02, 0.36 * u_waveHeight, surfacePosition.y);
-  vec2 towardSun = normalize(u_displayLightDirection.xz + vec2(0.0001));
+  vec2 towardSun = normalize(u_primaryLightDirection.xz + vec2(0.0001));
   vec2 viewHorizontal = normalize(ray.xz + vec2(0.0001));
   float backlight = pow(max(dot(viewHorizontal, towardSun), 0.0), 3.0);
   float scatterReach = 1.0 - smoothstep(24.0, 170.0, distanceToSurface);
@@ -1479,17 +1493,17 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
   float sparkleReach = 1.0 - smoothstep(30.0, 260.0, distanceToSurface);
   vec3 glitterNormal = normal;
   if (sparkleReach > 0.001) {
-    vec2 capillaryDrift = u_windDirection * u_oceanTime * 1.9;
-    vec2 coarsePoint = surfacePosition.xz * 7.0 + capillaryDrift;
-    vec2 finePoint = mat2(0.6, -0.8, 0.8, 0.6) * surfacePosition.xz * 21.0
-      - capillaryDrift * 1.4;
+    vec2 capillaryPoint = surfacePosition.xz
+      - u_windDirection * u_oceanTime * 0.27;
+    vec2 coarsePoint = capillaryPoint * 7.0;
+    vec2 finePoint = mat2(0.6, -0.8, 0.8, 0.6) * capillaryPoint * 21.0;
     vec2 capillarySlope = vec2(
       noise21(coarsePoint + vec2(0.3, 0.0)) - noise21(coarsePoint - vec2(0.3, 0.0)),
       noise21(coarsePoint + vec2(0.0, 0.3)) - noise21(coarsePoint - vec2(0.0, 0.3))
-    ) * 0.42 + vec2(
+    ) * 0.055 + vec2(
       noise21(finePoint + vec2(0.3, 0.0)) - noise21(finePoint - vec2(0.3, 0.0)),
       noise21(finePoint + vec2(0.0, 0.3)) - noise21(finePoint - vec2(0.0, 0.3))
-    ) * 0.26;
+    ) * 0.035;
     glitterNormal = normalize(
       normal + vec3(capillarySlope.x, 0.0, capillarySlope.y) * sparkleReach
     );
@@ -1497,33 +1511,40 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
   color += coxMunkSunGlitter(
     glitterNormal,
     -ray,
-    u_displayLightDirection,
-    sunColor
+    u_primaryLightDirection,
+    waterHighlightColor
   ) * glitterDetail;
 
   float foamReach = (1.0 - smoothstep(50.0, 240.0, distanceToSurface)) * horizonDetail;
   if (foamReach > 0.001) {
     float jacobian = oceanFoamJacobian(surfacePosition.xz, distanceToSurface);
-    vec2 foamDrift = u_windDirection * u_oceanTime * 0.09;
-    float bubbles = noise21(surfacePosition.xz * 0.9 + foamDrift) * 0.55
-      + noise21(surfacePosition.xz * 3.4 - foamDrift * 1.6) * 0.45;
+    vec2 foamPoint = surfacePosition.xz
+      - u_windDirection * u_oceanTime * 0.10;
+    float bubbles = noise21(foamPoint * 0.9) * 0.55
+      + noise21(foamPoint * 3.4) * 0.45;
     vec2 windPerpendicular = vec2(-u_windDirection.y, u_windDirection.x);
     float streaks = noise21(vec2(
-      dot(surfacePosition.xz, u_windDirection) * 0.07 + u_oceanTime * 0.02,
-      dot(surfacePosition.xz, windPerpendicular) * 0.75
+      dot(foamPoint, u_windDirection) * 0.07,
+      dot(foamPoint, windPerpendicular) * 0.75
     ));
-    float crestFoam = (1.0 - smoothstep(0.79, 0.855, jacobian))
-      * smoothstep(0.34, 0.70, bubbles + crest * 0.22);
-    float streakFoam = smoothstep(0.72, 0.94, streaks)
-      * smoothstep(0.62, 1.0, crest)
-      * smoothstep(0.35, 0.7, bubbles)
-      * 0.35;
+    float compression = 1.0 - smoothstep(0.66, 0.76, jacobian);
+    float crestFoam = compression
+      * smoothstep(0.52, 0.86, crest)
+      * smoothstep(0.55, 0.78, bubbles)
+      * 0.38;
+    float streakFoam = smoothstep(0.82, 0.97, streaks)
+      * smoothstep(0.76, 1.0, crest)
+      * smoothstep(0.50, 0.78, bubbles)
+      * 0.12;
     float foam = clamp(crestFoam + streakFoam, 0.0, 1.0) * foamReach;
     if (foam > 0.001) {
-      float foamLight = max(dot(normal, u_displayLightDirection), 0.0) * 0.72 + 0.08;
-      vec3 foamRadiance = vec3(0.84, 0.86, 0.86)
-        * (sunColor * foamLight + skyLut(vec3(0.0, 1.0, 0.0)).rgb * 0.95);
-      color = mix(color, foamRadiance, foam * 0.9);
+      float foamLight = max(dot(normal, u_primaryLightDirection), 0.0) * 0.72 + 0.08;
+      vec3 foamRadiance = vec3(0.70, 0.74, 0.76) * (
+        waterHighlightColor * foamLight * 0.42
+          + skyLut(vec3(0.0, 1.0, 0.0)).rgb * 0.58
+          + 0.12
+      );
+      color = mix(color, foamRadiance, foam * 0.62);
     }
     if (u_debugView > 2.5) {
       color = mix(color, vec3(2.0, 0.0, 0.0), foam);
@@ -2039,7 +2060,7 @@ function createInitialState(
       for (const mode of modes) {
         const phase = mode.waveX * worldX + mode.waveY * worldY + mode.phase;
         current += mode.amplitude * Math.cos(phase);
-        previous += mode.amplitude * Math.cos(phase - mode.previousPhaseOffset);
+        previous += mode.amplitude * Math.cos(phase + mode.previousPhaseOffset);
       }
 
       const index = y * size + x;
@@ -2062,8 +2083,8 @@ function createInitialState(
     state[index * 4 + 3] = 1;
   }
 
-  // The strongest modes drive the solver. Wave vectors are in tile units
-  // and the sign matches the initial state: the phase grows with time. The
+  // The strongest modes drive the solver. Wave vectors are in tile units.
+  // Their travel direction matches the spectral waves and the wind. The
   // frequency comes from the solver kernel, not from the deep-water formula,
   // so the forcing sits on the solver's own resonance for each mode.
   const kernel = getCachedIWaveKernel();
@@ -2164,7 +2185,6 @@ function getCrossingRenderScale(
 }
 
 type SceneLight = {
-  displayLightDirection: Direction3;
   displayMoonDirection: Direction3;
   displaySunDirection: Direction3;
   lightDirection: Direction3;
@@ -2175,6 +2195,7 @@ type SceneLight = {
   moonPhaseLight: Direction3;
   moonStrength: number;
   primaryIsMoon: boolean;
+  starTransform: Matrix3;
   sunAngularRadius: number;
   sunDirection: Direction3;
 };
@@ -2386,7 +2407,6 @@ function createPondEngine(
     scroll: getUniform(gl, displayProgram, "u_scroll"),
     sunDirection: getUniform(gl, displayProgram, "u_sunDirection"),
     displaySunDirection: getUniform(gl, displayProgram, "u_displaySunDirection"),
-    displayLightDirection: getUniform(gl, displayProgram, "u_displayLightDirection"),
     moonDirection: getUniform(gl, displayProgram, "u_moonDirection"),
     displayMoonDirection: getUniform(gl, displayProgram, "u_displayMoonDirection"),
     moonPhaseLight: getUniform(gl, displayProgram, "u_moonPhaseLight"),
@@ -2395,6 +2415,7 @@ function createPondEngine(
     moonStrength: getUniform(gl, displayProgram, "u_moonStrength"),
     primaryIsMoon: getUniform(gl, displayProgram, "u_primaryIsMoon"),
     primaryLightDirection: getUniform(gl, displayProgram, "u_primaryLightDirection"),
+    starTransform: getUniform(gl, displayProgram, "u_starTransform"),
     sunAngularRadius: getUniform(gl, displayProgram, "u_sunAngularRadius"),
     primaryLightStrength: getUniform(gl, displayProgram, "u_primaryLightStrength"),
     oceanTime: getUniform(gl, displayProgram, "u_oceanTime"),
@@ -2664,12 +2685,6 @@ function createPondEngine(
       light.lightDirection[2],
     );
     gl.uniform3f(
-      displayUniforms.displayLightDirection,
-      light.displayLightDirection[0],
-      light.displayLightDirection[1],
-      light.displayLightDirection[2],
-    );
-    gl.uniform3f(
       displayUniforms.moonDirection,
       light.moonDirection[0],
       light.moonDirection[1],
@@ -2693,6 +2708,7 @@ function createPondEngine(
     gl.uniform1f(displayUniforms.moonStrength, light.moonStrength);
     gl.uniform1f(displayUniforms.primaryIsMoon, light.primaryIsMoon ? 1 : 0);
     gl.uniform1f(displayUniforms.primaryLightStrength, light.lightStrength);
+    gl.uniformMatrix3fv(displayUniforms.starTransform, false, light.starTransform);
     gl.uniform1f(displayUniforms.oceanTime, oceanTime);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
@@ -2751,6 +2767,7 @@ function getSceneLight(
   celestial: CelestialState,
   width: number,
   height: number,
+  latitude: number,
 ): SceneLight {
   const aspect = width / Math.max(height, 1);
   const azimuthScale = getSunAzimuthScale(aspect, CAMERA_FOCAL_LENGTH);
@@ -2763,8 +2780,8 @@ function getSceneLight(
     celestial.moon.direction[0],
     celestial.moon.direction[2],
   );
+  const sceneMoonAzimuth = Math.atan2(moonDirection[0], moonDirection[2]);
   return {
-    displayLightDirection: primaryIsMoon ? displayMoonDirection : displaySunDirection,
     displayMoonDirection,
     displaySunDirection,
     lightDirection: primaryIsMoon ? moonDirection : sunDirection,
@@ -2774,10 +2791,11 @@ function getSceneLight(
     moonIllumination: celestial.moonIllumination,
     moonPhaseLight: rotateAboutY(
       celestial.sun.direction,
-      celestial.moon.hourAngle * azimuthScale - trueMoonAzimuth,
+      sceneMoonAzimuth - trueMoonAzimuth,
     ),
     moonStrength: primaryIsMoon ? celestial.primaryLightStrength : 0,
     primaryIsMoon,
+    starTransform: getStarFieldTransform(celestial.localSiderealAngle, latitude),
     sunAngularRadius: celestial.sun.angularRadius,
     sunDirection,
   };
@@ -3060,7 +3078,7 @@ export default function PondSurface({
         canvas.width,
         canvas.height,
         renderedScrollProgress,
-        getSceneLight(celestialRef.current, renderWidth, renderHeight),
+        getSceneLight(celestialRef.current, renderWidth, renderHeight, latitude),
         oceanTime,
         reducedMotion ? 1 : Math.min(accumulator / FIXED_TIME_STEP, 1),
       );
@@ -3121,7 +3139,7 @@ export default function PondSurface({
       // The quality fall-back re-runs this effect on the same context.
       if (!keepContext) gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, [qualityFallback, seed, stageId]);
+  }, [latitude, qualityFallback, seed, stageId]);
 
   return (
     <>

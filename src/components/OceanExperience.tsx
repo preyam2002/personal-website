@@ -139,7 +139,7 @@ export default function OceanExperience({
     const updateSeed = () => setSeed(getSessionOceanSeed());
     updateNow();
     updateSeed();
-    const timer = window.setInterval(updateNow, 30_000);
+    const timer = window.setInterval(updateNow, 1_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -156,7 +156,9 @@ export default function OceanExperience({
     ? DEFAULT_MINUTE
     : liveDate.getHours() * 60 + liveDate.getMinutes();
   const shownMinute = previewMinute ?? liveMinute;
-  const dateMs = dateAtMinute(baseDateMs, shownMinute);
+  const dateMs = previewMinute === null
+    ? baseDateMs
+    : dateAtMinute(baseDateMs, shownMinute);
 
   return (
     <>

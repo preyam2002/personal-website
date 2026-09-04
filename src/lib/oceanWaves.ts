@@ -27,6 +27,12 @@ export type SeaStateSummary = {
 
 export type Direction3 = readonly [number, number, number];
 
+export type Matrix3 = [
+  number, number, number,
+  number, number, number,
+  number, number, number,
+];
+
 const OCEAN_SEED_KEY = "preyam-ocean-seed-v2";
 const FALLBACK_SEED = 4603;
 
@@ -174,10 +180,11 @@ export function describeSeaState(field: OceanWaveField): SeaStateSummary {
 }
 
 /**
- * Compress the solar azimuth so the daily path fits the fixed camera.
+ * Compress the solar azimuth so the daily path fits the south-facing camera.
  *
  * The camera never turns. This helper maps the hour angle onto a narrow
- * azimuth range in front of the camera. The elevation stays physical.
+ * azimuth range in front of the camera. Screen-left is east, and screen-right
+ * is west. The elevation stays physical.
  */
 export function getSceneSunDirection(
   sun: CelestialPosition,
@@ -227,6 +234,32 @@ export function rotateAboutY(direction: Direction3, angle: number): Direction3 {
     direction[0] * cosine + direction[2] * sine,
     direction[1],
     -direction[0] * sine + direction[2] * cosine,
+  ];
+}
+
+/** Map a south-facing view direction into the fixed celestial frame. */
+export function getStarFieldTransform(
+  localSiderealAngle: number,
+  latitudeDegrees: number,
+): Matrix3 {
+  const latitude = latitudeDegrees * Math.PI / 180;
+  const poleY = Math.sin(latitude);
+  const poleZ = -Math.cos(latitude);
+  const sine = Math.sin(-localSiderealAngle);
+  const cosine = Math.cos(localSiderealAngle);
+  const oneMinusCosine = 1 - cosine;
+  const poleProduct = oneMinusCosine * poleY * poleZ;
+
+  return [
+    cosine,
+    poleZ * sine,
+    -poleY * sine,
+    -poleZ * sine,
+    cosine + oneMinusCosine * poleY * poleY,
+    poleProduct,
+    poleY * sine,
+    poleProduct,
+    cosine + oneMinusCosine * poleZ * poleZ,
   ];
 }
 

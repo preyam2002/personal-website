@@ -7,6 +7,7 @@ import {
   describeSeaState,
   getDisplaySunDirection,
   getSceneSunDirection,
+  getStarFieldTransform,
   getSunAzimuthScale,
   rotateAboutY,
   seededRandom,
@@ -17,6 +18,17 @@ const LONGITUDE = 73.7;
 
 function vectorLength(vector: readonly [number, number, number]) {
   return Math.hypot(vector[0], vector[1], vector[2]);
+}
+
+function transformDirection(
+  matrix: ReturnType<typeof getStarFieldTransform>,
+  direction: readonly [number, number, number],
+) {
+  return [
+    matrix[0] * direction[0] + matrix[3] * direction[1] + matrix[6] * direction[2],
+    matrix[1] * direction[0] + matrix[4] * direction[1] + matrix[7] * direction[2],
+    matrix[2] * direction[0] + matrix[5] * direction[1] + matrix[8] * direction[2],
+  ] as const;
 }
 
 describe("createOceanWaveField", () => {
@@ -180,5 +192,45 @@ describe("rotateAboutY", () => {
     expect(rotated[1]).toBeCloseTo(direction[1], 12);
     expect(rotated[2]).toBeCloseTo(Math.cos(azimuth + 0.25) * Math.cos(elevation), 9);
     expect(vectorLength(rotated)).toBeCloseTo(1, 9);
+  });
+});
+
+describe("getStarFieldTransform", () => {
+  it("returns the identity at a zero sidereal angle", () => {
+    const matrix = getStarFieldTransform(0, LATITUDE);
+    const identity = [
+      1, 0, 0,
+      0, 1, 0,
+      0, 0, 1,
+    ];
+
+    matrix.forEach((value, index) => {
+      expect(value).toBeCloseTo(identity[index], 12);
+    });
+  });
+
+  it("keeps the north celestial pole fixed", () => {
+    const latitude = LATITUDE * Math.PI / 180;
+    const pole = [0, Math.sin(latitude), -Math.cos(latitude)] as const;
+    const transformed = transformDirection(
+      getStarFieldTransform(1.7, LATITUDE),
+      pole,
+    );
+
+    expect(transformed[0]).toBeCloseTo(pole[0], 12);
+    expect(transformed[1]).toBeCloseTo(pole[1], 12);
+    expect(transformed[2]).toBeCloseTo(pole[2], 12);
+  });
+
+  it("moves a star from the east horizon to the zenith at the equator", () => {
+    const transformed = transformDirection(
+      getStarFieldTransform(Math.PI / 2, 0),
+      [0, 1, 0],
+    );
+
+    expect(transformed[0]).toBeCloseTo(-1, 12);
+    expect(transformed[1]).toBeCloseTo(0, 12);
+    expect(transformed[2]).toBeCloseTo(0, 12);
+    expect(vectorLength(transformed)).toBeCloseTo(1, 12);
   });
 });
