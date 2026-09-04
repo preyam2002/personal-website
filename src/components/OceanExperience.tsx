@@ -4,11 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import PondSurface from "@/components/PondSurface";
 import { getDaylightWindow } from "@/lib/celestial";
-import {
-  createOceanWaveField,
-  describeSeaState,
-  getSessionOceanSeed,
-} from "@/lib/oceanWaves";
+import { getSessionOceanSeed } from "@/lib/oceanWaves";
 import {
   dialAngleToMinute,
   dialArcPath,
@@ -147,11 +143,6 @@ export default function OceanExperience({
     return () => window.clearInterval(timer);
   }, []);
 
-  const seaState = useMemo(
-    () => (seed === null ? null : describeSeaState(createOceanWaveField(seed))),
-    [seed],
-  );
-
   const baseDateMs = now ?? DEFAULT_DATE;
   const liveDate = new Date(baseDateMs);
   const dayStart = new Date(baseDateMs);
@@ -205,26 +196,6 @@ export default function OceanExperience({
           )}
         </div>
       </div>
-      {seaState && (
-        <dl className={styles.seaState} aria-label="Sea state">
-          <div>
-            <dt>Wind</dt>
-            <dd>{seaState.windSpeed.toFixed(1)} m/s</dd>
-          </div>
-          <div>
-            <dt>Swell</dt>
-            <dd>{seaState.swellPeriod.toFixed(1)} s</dd>
-          </div>
-          <div>
-            <dt>Hs</dt>
-            <dd>{seaState.significantWaveHeight.toFixed(2)} m</dd>
-          </div>
-          <div>
-            <dt>Cloud</dt>
-            <dd>{Math.round(seaState.cloudCover * 8)}/8</dd>
-          </div>
-        </dl>
-      )}
     </>
   );
 }

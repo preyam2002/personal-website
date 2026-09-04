@@ -26,7 +26,10 @@
   z-index: 0;
   display: block;
   width: 100%;
-  height: 100svh;
+  /* Large viewport height: the canvas stays full height when the mobile
+     address bar collapses on scroll. The bar only ever clips the bottom. */
+  height: 100vh;
+  height: 100lvh;
   background: linear-gradient(160deg, #173e41, #06171b 70%);
 }
 

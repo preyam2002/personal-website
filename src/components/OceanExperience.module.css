@@ -97,37 +97,6 @@
   fill: rgba(233, 236, 223, 0.7);
 }
 
-.seaState {
-  position: fixed;
-  right: clamp(1.25rem, 4vw, 4.5rem);
-  bottom: max(clamp(1.8rem, 3.6vh, 2.6rem), calc(env(safe-area-inset-bottom) + 1.4rem));
-  z-index: 5;
-  display: flex;
-  gap: 1.1rem;
-  margin: 0;
-  color: rgba(233, 236, 223, 0.5);
-  font-family: var(--font-mono), monospace;
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.76);
-  text-transform: uppercase;
-}
-
-.seaState div {
-  display: flex;
-  gap: 0.4rem;
-}
-
-.seaState dt {
-  color: rgba(233, 236, 223, 0.36);
-}
-
-.seaState dd {
-  margin: 0;
-  color: rgba(233, 236, 223, 0.66);
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 600px) {
   .instrument {
     right: 1.1rem;
@@ -137,16 +106,5 @@
   .dial {
     width: 3rem;
     height: 3rem;
-  }
-
-  .seaState {
-    right: 1.1rem;
-    bottom: max(1.4rem, calc(env(safe-area-inset-bottom) + 1rem));
-    gap: 0.8rem;
-    font-size: 0.5rem;
-  }
-
-  .seaState div:last-child {
-    display: none;
   }
 }

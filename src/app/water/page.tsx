@@ -42,9 +42,6 @@ const contactLinks = [
   { label: "GitHub", url: "https://github.com/preyam2002" },
   { label: "LinkedIn", url: "https://www.linkedin.com/in/preyam" },
   { label: "Codeforces", url: "https://codeforces.com/profile/preyam" },
-  { label: "Medium", url: "https://preyam2002.medium.com" },
-  { label: "Writing", url: "/dispatches" },
-  { label: "Email", url: "mailto:preyam2002@gmail.com" },
 ];
 
 export default function WaterConcept() {
@@ -65,9 +62,6 @@ export default function WaterConcept() {
         <div className={styles.workContent}>
           <header className={styles.workHeader}>
             <h2 id="work-title">Experience</h2>
-            <a href="https://www.linkedin.com/in/preyam" target="_blank" rel="noopener noreferrer">
-              LinkedIn
-            </a>
           </header>
 
           <ol className={styles.experience}>
