@@ -89,3 +89,40 @@ export function intersectHorizontalPlane(
   if (distance <= 0 || distance > maximumDistance) return null;
   return [origin[0] + direction[0] * distance, height, origin[2] + direction[2] * distance];
 }
+
+/**
+ * Intersect a ray with a height field by fixed-point iteration.
+ *
+ * Each step intersects the plane at the height under the previous hit. The
+ * step converges while the surface slope stays below the ray slope, which
+ * holds for the swell at the view angles of the scene.
+ */
+export function intersectHeightField(
+  origin: Vector3,
+  direction: Vector3,
+  heightAt: (x: number, z: number) => number,
+  maximumDistance: number,
+  iterations = 5,
+): Vector3 | null {
+  let hit = intersectHorizontalPlane(origin, direction, 0, maximumDistance);
+  for (let step = 0; step < iterations && hit; step += 1) {
+    hit = intersectHorizontalPlane(origin, direction, heightAt(hit[0], hit[2]), maximumDistance);
+  }
+  return hit;
+}
+
+/** Project a scene point to the display shader screen convention. Return null behind the camera. */
+export function projectToScreen(camera: OceanCamera, point: Vector3): [number, number] | null {
+  const relative: Vector3 = [
+    point[0] - camera.origin[0],
+    point[1] - camera.origin[1],
+    point[2] - camera.origin[2],
+  ];
+  const depth = relative[0] * camera.forward[0] + relative[1] * camera.forward[1] + relative[2] * camera.forward[2];
+  if (depth <= 1e-4) return null;
+  const scale = camera.focalLength / depth;
+  return [
+    (relative[0] * camera.right[0] + relative[1] * camera.right[1] + relative[2] * camera.right[2]) * scale,
+    (relative[0] * camera.up[0] + relative[1] * camera.up[1] + relative[2] * camera.up[2]) * scale,
+  ];
+}

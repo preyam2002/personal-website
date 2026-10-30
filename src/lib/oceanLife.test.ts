@@ -246,9 +246,11 @@ describe("pellet packing", () => {
     dropPellets(pellets, 3, 8, 2, 4, flat, seededRandom(9), 0);
     pellets[1].floating = false;
     pellets[1].position = [3, -2, 8];
-    expect(packPellets(pellets, data, bounds)).toBe(2);
+    expect(packPellets(pellets, data, bounds, pellet => pellet.floating ? 5 : -1)).toBe(2);
     const row = ACTOR_TEXTURE_WIDTH * 3 * 4;
+    expect(Array.from(data.subarray(row, row + 3))).toEqual([5, 0, 0]);
     expect(data[row + 3]).toBeLessThan(0);
+    expect(Array.from(data.subarray(row + 4, row + 7))).toEqual([3, -2, 8]);
     expect(data[row + 7]).toBeGreaterThan(0);
     expect(bounds.low[1]).toBeLessThanOrEqual(-2);
     expect(bounds.high[2]).toBeGreaterThanOrEqual(pellets[0].position[2]);

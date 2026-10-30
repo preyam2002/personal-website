@@ -402,6 +402,8 @@ export function stepPellets(
 
 export const ACTOR_TEXTURE_WIDTH = 64;
 export const PELLET_SLOTS = 12;
+// Floating objects can move this far between the CPU sample and the frame.
+export const FLOATING_MARGIN = 0.35;
 export const ACTOR_TEXTURE_ROWS = 4;
 export const FISH_BOUND_RADIUS = 0.72;
 
@@ -488,26 +490,40 @@ export function getSchoolHome(time: number, camera: OceanCamera, scroll: number,
 /**
  * Write the pellets into row 3 of the actor texture and grow the bounds.
  *
- * Each texel holds (position, radius). A floating pellet stores a negative
- * radius and also grows the air bounds, because part of it sits above water.
+ * A sinking pellet stores (position, radius). A floating pellet stores
+ * (probe slot, 0, 0, -radius): the shader reads its position from the probe
+ * pass of the same frame, so it moves with the current surface. The bounds use
+ * the CPU position with a margin for the surface motion since the last sample.
  */
-export function packPellets(pellets: readonly Pellet[], data: Float32Array, bounds: SchoolBounds) {
+export function packPellets(
+  pellets: readonly Pellet[],
+  data: Float32Array,
+  bounds: SchoolBounds,
+  probeSlot: (pellet: Pellet) => number,
+) {
   const count = Math.min(pellets.length, PELLET_SLOTS);
-  const grow = (low: Vector3, high: Vector3, position: Vector3) => {
+  const grow = (low: Vector3, high: Vector3, position: Vector3, margin: number) => {
     if (low[0] > high[0]) {
       low.fill(Infinity);
       high.fill(-Infinity);
     }
     for (let axis = 0; axis < 3; axis += 1) {
-      low[axis] = Math.min(low[axis], position[axis] - PELLET_RADIUS);
-      high[axis] = Math.max(high[axis], position[axis] + PELLET_RADIUS);
+      low[axis] = Math.min(low[axis], position[axis] - margin);
+      high[axis] = Math.max(high[axis], position[axis] + margin);
     }
   };
   for (let index = 0; index < count; index += 1) {
-    const { position, floating } = pellets[index];
-    data.set([...position, floating ? -PELLET_RADIUS : PELLET_RADIUS], (ACTOR_TEXTURE_WIDTH * 3 + index) * 4);
-    grow(bounds.low, bounds.high, position);
-    if (floating) grow(bounds.airLow, bounds.airHigh, position);
+    const pellet = pellets[index];
+    const slot = pellet.floating ? probeSlot(pellet) : -1;
+    const texel = (ACTOR_TEXTURE_WIDTH * 3 + index) * 4;
+    if (slot >= 0) {
+      data.set([slot, 0, 0, -PELLET_RADIUS], texel);
+      grow(bounds.low, bounds.high, pellet.position, PELLET_RADIUS + FLOATING_MARGIN);
+      grow(bounds.airLow, bounds.airHigh, pellet.position, PELLET_RADIUS + FLOATING_MARGIN);
+    } else {
+      data.set([...pellet.position, PELLET_RADIUS], texel);
+      grow(bounds.low, bounds.high, pellet.position, PELLET_RADIUS);
+    }
   }
   return count;
 }

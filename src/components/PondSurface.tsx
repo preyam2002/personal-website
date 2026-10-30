@@ -18,7 +18,8 @@ import {
   getCameraRay,
   getOceanCamera,
   getOceanSeedPhase,
-  intersectHorizontalPlane,
+  intersectHeightField,
+  projectToScreen,
   type Vector3,
 } from "@/lib/oceanCamera";
 import {
@@ -47,7 +48,16 @@ import {
   type SchoolEnvironment,
   type SchoolStimulus,
 } from "@/lib/oceanLife";
-import { lifeShader } from "@/lib/oceanLifeShaders";
+import { lifeReflectionShader, lifeShader } from "@/lib/oceanLifeShaders";
+import {
+  createBoats,
+  packBoats,
+  placeBoat,
+  pushBoat,
+  pushBoatsFromRipple,
+  stepBoats,
+  type PaperBoat,
+} from "@/lib/oceanBoats";
 import {
   PROBE_ROWS,
   PROBE_SLOTS,
@@ -120,6 +130,7 @@ type RenderTarget = {
 
 type QualityProfile = {
   atmosphereHeight: number;
+  boatCount: number;
   atmosphereWidth: number;
   causticGridSize: number;
   causticTextureSize: number;
@@ -149,6 +160,7 @@ const DEFAULT_CELESTIAL_DATE = Date.UTC(2026, 5, 21, 6, 30);
 
 const FULL_QUALITY: QualityProfile = {
   atmosphereHeight: ATMOSPHERE_TEXTURE_HEIGHT,
+  boatCount: 3,
   atmosphereWidth: ATMOSPHERE_TEXTURE_WIDTH,
   causticGridSize: 120,
   causticTextureSize: 384,
@@ -169,6 +181,7 @@ const FULL_QUALITY: QualityProfile = {
 
 const REDUCED_QUALITY: QualityProfile = {
   atmosphereHeight: 60,
+  boatCount: 2,
   atmosphereWidth: 160,
   causticGridSize: 80,
   causticTextureSize: 192,
@@ -189,6 +202,7 @@ const REDUCED_QUALITY: QualityProfile = {
 
 const LOW_QUALITY: QualityProfile = {
   atmosphereHeight: 48,
+  boatCount: 0,
   atmosphereWidth: 128,
   causticGridSize: 48,
   causticTextureSize: 128,
@@ -1898,6 +1912,7 @@ vec3 sampleUnderwaterRay(vec3 origin, vec3 direction, int sampleCount) {
 }
 
 ${lifeShader}
+${lifeReflectionShader}
 
 vec3 renderAboveWater(vec3 origin, vec3 ray) {
   float distanceToSurface;
@@ -1934,7 +1949,8 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
     vec3(sunLuminance),
     (1.0 - u_primaryIsMoon) * 0.16
   );
-  vec3 reflected = meanSkyRadiance(ray, opticalNormal, tangent, bitangent, slopeVariance);
+  vec3 reflected = reflectLife(surfacePosition, reflect(ray, opticalNormal),
+    meanSkyRadiance(ray, opticalNormal, tangent, bitangent, slopeVariance));
   if (u_debugView > 5.5) return encodeScene(reflected, vec3(1.0), 0.92);
   vec3 refractedDirection = refract(ray, opticalNormal, 1.0 / WATER_IOR);
   vec3 refracted = sampleRefractedScene(
@@ -2241,6 +2257,7 @@ export type LifeFrame = {
   actors: Float32Array;
   school: SchoolBounds;
   pelletCount: number;
+  boatCount: number;
   probes: Float32Array;
   probeCount: number;
 };
@@ -2442,6 +2459,8 @@ const TAP_RIPPLE_AMPLITUDE = 0.14;
 const PELLET_RIPPLE_AMPLITUDE = 0.04;
 const BITE_RIPPLE_AMPLITUDE = 0.05;
 const FEEDING_DISTANCE = 16;
+const MAX_DRAG_SPEED = 2.5;
+const BOAT_CONTACT_PIXELS = 28;
 const MAX_LIFE_STEP_SECONDS = 0.1;
 const POINTER_MEMORY_SECONDS = 6;
 const LIFE_SUBSTEP_SECONDS = 1 / 30;
@@ -2866,6 +2885,8 @@ async function createPondEngine(
     actors: getUniform(gl, displayProgram, "u_actors"),
     fishCount: getUniform(gl, displayProgram, "u_fishCount"),
     pelletCount: getUniform(gl, displayProgram, "u_pelletCount"),
+    boatCount: getUniform(gl, displayProgram, "u_boatCount"),
+    probeSurface: getUniform(gl, displayProgram, "u_probeSurface"),
     lifeLow: getUniform(gl, displayProgram, "u_lifeLow"),
     lifeHigh: getUniform(gl, displayProgram, "u_lifeHigh"),
     airLow: getUniform(gl, displayProgram, "u_airLow"),
@@ -2987,6 +3008,7 @@ async function createPondEngine(
   gl.uniform1i(displayUniforms.surface, 5);
   gl.uniform1i(displayUniforms.surfaceParameter, 6);
   gl.uniform1i(displayUniforms.actors, 9);
+  gl.uniform1i(displayUniforms.probeSurface, 10);
   gl.uniform1f(displayUniforms.gridSize, quality.simulationSize);
   gl.uniform1f(displayUniforms.domainSize, WATER_DOMAIN_METERS);
   gl.uniform1f(displayUniforms.floorDepth, OCEAN_DEPTH_METERS);
@@ -3369,13 +3391,15 @@ async function createPondEngine(
     gl.uniform1f(displayUniforms.oceanTime, oceanTime);
     applyRipples(rippleUniforms.display);
     const { school } = life;
-    if (school.count > 0 || life.pelletCount > 0) {
+    if (life.probeCount > 0) bindTexture(gl, probeTarget.texture, 10);
+    if (school.count > 0 || life.pelletCount > 0 || life.boatCount > 0) {
       bindTexture(gl, actorTexture, 9);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ACTOR_TEXTURE_WIDTH, ACTOR_TEXTURE_ROWS,
         gl.RGBA, gl.FLOAT, life.actors);
     }
     gl.uniform1i(displayUniforms.fishCount, school.count);
     gl.uniform1i(displayUniforms.pelletCount, life.pelletCount);
+    gl.uniform1i(displayUniforms.boatCount, life.boatCount);
     gl.uniform3f(displayUniforms.lifeLow, school.low[0], school.low[1], school.low[2]);
     gl.uniform3f(displayUniforms.lifeHigh, school.high[0], school.high[1], school.high[2]);
     gl.uniform3f(displayUniforms.airLow, school.airLow[0], school.airLow[1], school.airLow[2]);
@@ -3616,10 +3640,27 @@ export default function PondSurface({
     // Probe results come back one frame later. The keys connect them to their objects.
     const probeSamples = new Map<string, ProbeSample>();
     const probeReadback = new Float32Array(PROBE_SLOTS * PROBE_ROWS * 4);
-    let submittedProbeKeys: string[] = [];
-    let frameProbeKeys: string[] = [];
-    const floatingSurface = (key: string, x: number, z: number) =>
-      probeSamples.get(key) ?? sampleSwellSurface(waveField, x, z, oceanTime);
+    type ProbeBatch = { keys: string[]; requests: ProbeRequest[]; time: number };
+    let frameProbes: ProbeBatch = { keys: [], requests: [], time: 0 };
+    let submittedProbes = frameProbes;
+    let probeOrigin = frameProbes;
+    /**
+     * Return the surface under a floating object.
+     *
+     * A probe sample is one frame old. The analytic swell carries it forward to
+     * the current time and anchor, so a slow frame does not sink the object.
+     */
+    const floatingSurface = (key: string, x: number, z: number): ProbeSample => {
+      const now = sampleSwellSurface(waveField, x, z, oceanTime);
+      const sample = probeSamples.get(key);
+      const request = probeOrigin.requests[probeOrigin.keys.indexOf(key)];
+      if (!sample || !request) return now;
+      const then = sampleSwellSurface(waveField, request.x, request.z, probeOrigin.time);
+      return {
+        position: sample.position.map((value, axis) => value + now.position[axis] - then.position[axis]) as Vector3,
+        normal: sample.normal,
+      };
+    };
     const updateStimuli = (timestamp: number) => {
       stimuli.length = 0;
       const recent = pointer.point && lifeTime - pointer.lifeTime < POINTER_MEMORY_SECONDS;
@@ -3651,6 +3692,7 @@ export default function PondSurface({
       pellets,
     });
     const school: Fish[] = createSchool(quality.fishCount, schoolEnvironment(0).home, lifeRandom);
+    const boats: PaperBoat[] = createBoats(quality.boatCount, lifeRandom);
     // Settle the school before the first frame, so a still frame shows a formed school.
     for (let step = 0; step < 90; step += 1) stepSchool(school, schoolEnvironment(0), 1 / 30);
     const actors = new Float32Array(ACTOR_TEXTURE_WIDTH * ACTOR_TEXTURE_ROWS * 4);
@@ -3658,6 +3700,7 @@ export default function PondSurface({
       actors,
       school: packSchool(school, actors, surfaceAt),
       pelletCount: 0,
+      boatCount: 0,
       probes: new Float32Array(PROBE_SLOTS * 4),
       probeCount: 0,
     };
@@ -3669,6 +3712,7 @@ export default function PondSurface({
         stepSchool(school, schoolEnvironment(renderedScrollProgress), seconds / steps, lifeEvents);
       }
       stepPellets(pellets, seconds, surfaceAt);
+      stepBoats(boats, seconds, waveField.windDirection);
       for (const event of lifeEvents) {
         if (event.type === "bite" && event.floating) {
           ripples.add(event.position[0], event.position[2], BITE_RIPPLE_AMPLITUDE, lifeTime);
@@ -3676,8 +3720,13 @@ export default function PondSurface({
       }
     };
     // Place the floating objects on the sampled wave field and request the next samples.
-    const updateFloating = () => {
+    const updateFloating = (seconds: number) => {
       const requests: ProbeRequest[] = [];
+      boats.forEach((boat, index) => {
+        const key = `boat:${index}`;
+        placeBoat(boat, floatingSurface(key, boat.anchor[0], boat.anchor[1]), seconds);
+        requests.push({ key, x: boat.anchor[0], z: boat.anchor[1], mode: "floating", footprint: 0.2 });
+      });
       for (const pellet of pellets) {
         if (!pellet.floating) continue;
         const key = `pellet:${pellet.id}`;
@@ -3685,8 +3734,8 @@ export default function PondSurface({
         pellet.position = [sample.position[0], sample.position[1] - PELLET_RADIUS * 0.35, sample.position[2]];
         requests.push({ key, x: pellet.anchor[0], z: pellet.anchor[1], mode: "floating", footprint: 0.05 });
       }
-      frameProbeKeys = packProbes(requests, lifeFrame.probes);
-      lifeFrame.probeCount = frameProbeKeys.length;
+      frameProbes = { keys: packProbes(requests, lifeFrame.probes), requests, time: oceanTime };
+      lifeFrame.probeCount = frameProbes.keys.length;
     };
 
     const frameGate = createWebGLFrameGate(gl);
@@ -3820,7 +3869,10 @@ export default function PondSurface({
         requestRender();
         return;
       }
-      if (engine.readProbes(probeReadback)) unpackProbes(submittedProbeKeys, probeReadback, probeSamples);
+      if (engine.readProbes(probeReadback)) {
+        unpackProbes(submittedProbes.keys, probeReadback, probeSamples);
+        probeOrigin = submittedProbes;
+      }
 
       if (canvas.dataset.webgl !== "active" && startupFrames >= (reducedMotion || previewTime !== null ? 1 : 2)) {
         canvas.dataset.webgl = "active";
@@ -3862,9 +3914,12 @@ export default function PondSurface({
       else gestures.cancel();
       updateStimuli(timestamp);
       rippleFrame.count = ripples.pack(lifeTime, rippleFrame.data);
-      updateFloating();
+      updateFloating(reducedMotion || previewTime !== null ? 0 : Math.min(frameSeconds, lifeStepLimit));
       lifeFrame.school = packSchool(school, lifeFrame.actors, surfaceAt);
-      lifeFrame.pelletCount = packPellets(pellets, lifeFrame.actors, lifeFrame.school);
+      lifeFrame.pelletCount = packPellets(pellets, lifeFrame.actors, lifeFrame.school,
+        pellet => frameProbes.keys.indexOf(`pellet:${pellet.id}`));
+      lifeFrame.boatCount = packBoats(boats, lifeFrame.actors, lifeFrame.school,
+        index => frameProbes.keys.indexOf(`boat:${index}`));
 
       const currentCelestial = previewCelestial ?? celestialRef.current;
       if (currentCelestial !== lightState || renderWidth !== lightWidth || renderHeight !== lightHeight) {
@@ -3884,7 +3939,7 @@ export default function PondSurface({
         rippleFrame,
         lifeFrame,
       );
-      submittedProbeKeys = frameProbeKeys;
+      submittedProbes = frameProbes;
       frameGate.submit();
       startupFrames += 1;
       const scaleText = appliedScale.toFixed(2);
@@ -3908,7 +3963,18 @@ export default function PondSurface({
       const y = 1 - (clientY - bounds.top) / Math.max(bounds.height, 1) * 2;
       const camera = getOceanCamera(renderedScrollProgress, seedPhase);
       if (camera.origin[1] < 0.2) return null;
-      return intersectHorizontalPlane(camera.origin, getCameraRay(camera, x, y), 0, INTERACTION_DISTANCE);
+      return intersectHeightField(camera.origin, getCameraRay(camera, x, y), surfaceAt, INTERACTION_DISTANCE);
+    };
+    // Return the client position of a scene point, so a pointer can touch what the visitor sees.
+    const toClientPoint = (point: Vector3) => {
+      const bounds = canvas.getBoundingClientRect();
+      const aspect = bounds.width / Math.max(bounds.height, 1);
+      const screen = projectToScreen(getOceanCamera(renderedScrollProgress, seedPhase), point);
+      if (!screen) return null;
+      return [
+        bounds.left + (screen[0] / aspect + 1) * 0.5 * bounds.width,
+        bounds.top + (1 - screen[1]) * 0.5 * bounds.height,
+      ] as const;
     };
 
     const handleGestures = (events: GestureEvent[]) => {
@@ -3922,10 +3988,44 @@ export default function PondSurface({
           pressedAt = performance.now();
           continue;
         }
+        if (event.type === "drag") {
+          const point = toWaterPoint(event.x, event.y);
+          const previous = toWaterPoint(event.x - event.dx, event.y - event.dy);
+          if (!point || !previous || event.seconds <= 0) continue;
+          let velocityX = (point[0] - previous[0]) / event.seconds;
+          let velocityZ = (point[2] - previous[2]) / event.seconds;
+          const speed = Math.hypot(velocityX, velocityZ);
+          if (speed > MAX_DRAG_SPEED) {
+            velocityX *= MAX_DRAG_SPEED / speed;
+            velocityZ *= MAX_DRAG_SPEED / speed;
+          }
+          for (const boat of boats) {
+            // Test the whole pointer segment in screen space, so a fast drag cannot skip a boat.
+            const center = toClientPoint(boat.position);
+            const bow = toClientPoint([boat.position[0], boat.position[1], boat.position[2] + boat.length]);
+            if (!center || !bow) continue;
+            const reach = Math.max(BOAT_CONTACT_PIXELS, Math.hypot(bow[0] - center[0], bow[1] - center[1]) * 1.2);
+            const startX = event.x - event.dx;
+            const startY = event.y - event.dy;
+            const along = Math.min(Math.max(((center[0] - startX) * event.dx + (center[1] - startY) * event.dy)
+              / Math.max(event.dx ** 2 + event.dy ** 2, 1e-9), 0), 1);
+            const offsetX = center[0] - (startX + event.dx * along);
+            const offsetY = center[1] - (startY + event.dy * along);
+            if (Math.hypot(offsetX, offsetY) > reach) continue;
+            // The push moves the boat toward the pointer velocity and spins it by the side of contact.
+            const side = Math.sign(event.dx * offsetY - event.dy * offsetX);
+            pushBoat(boat, [
+              (velocityX * 0.8 - boat.velocity[0]) * 0.5,
+              (velocityZ * 0.8 - boat.velocity[1]) * 0.5,
+            ], side * Math.min(speed, MAX_DRAG_SPEED) * 0.4);
+          }
+          continue;
+        }
         if (event.type !== "tap") continue;
         const point = toWaterPoint(event.x, event.y);
         if (!point) continue;
         ripples.add(point[0], point[2], TAP_RIPPLE_AMPLITUDE, lifeTime);
+        pushBoatsFromRipple(boats, point[0], point[2], 0.25);
         threats.push({ point: [point[0], -0.5, point[2]], until: lifeTime + 0.5 });
       }
     };

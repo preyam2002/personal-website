@@ -4,7 +4,9 @@ import {
   getCameraRay,
   getOceanCamera,
   getOceanSeedPhase,
+  intersectHeightField,
   intersectHorizontalPlane,
+  projectToScreen,
 } from "./oceanCamera";
 
 const length = (vector: readonly number[]) => Math.hypot(...vector);
@@ -42,5 +44,30 @@ describe("ocean camera mirror", () => {
     const camera = getOceanCamera(0, 0);
     expect(intersectHorizontalPlane(camera.origin, getCameraRay(camera, 0, 0.5), 0, 100)).toBeNull();
     expect(intersectHorizontalPlane(camera.origin, getCameraRay(camera, 0, -0.01), 0, 5)).toBeNull();
+  });
+});
+
+describe("pointer mapping", () => {
+  it("finds a wave trough that the mean plane misses by meters", () => {
+    const camera = getOceanCamera(0, 0);
+    const ray = getCameraRay(camera, 0.2, -0.15);
+    const heightAt = (x: number, z: number) => 0.25 * Math.sin(x * 0.3 + z * 0.07) - 0.1;
+    const hit = intersectHeightField(camera.origin, ray, heightAt, 100)!;
+    expect(hit[1]).toBeCloseTo(heightAt(hit[0], hit[2]), 4);
+    const plane = intersectHorizontalPlane(camera.origin, ray, 0, 100)!;
+    expect(Math.abs(plane[2] - hit[2])).toBeGreaterThan(0.2);
+  });
+
+  it("projects a point back to the screen position of its ray", () => {
+    for (const scroll of [0, 0.1]) {
+      const camera = getOceanCamera(scroll, 0.7);
+      const ray = getCameraRay(camera, -0.4, -0.3);
+      const point = camera.origin.map((value, axis) => value + ray[axis] * 7) as [number, number, number];
+      const screen = projectToScreen(camera, point)!;
+      expect(screen[0]).toBeCloseTo(-0.4, 6);
+      expect(screen[1]).toBeCloseTo(-0.3, 6);
+    }
+    const camera = getOceanCamera(0, 0);
+    expect(projectToScreen(camera, [0, 0, -20])).toBeNull();
   });
 });
