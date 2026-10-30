@@ -31,6 +31,21 @@ npm start
 - `src/content/dispatches/` — MDX writing
 - `src/app/lab/` and `src/app/lab-3d/` — experimental interaction routes
 
+## Water interactions
+
+The homepage ocean responds to the visitor while the camera is above the water:
+
+- A click or tap makes a ring ripple in the wave field. Nearby fish dart away, and nearby boats drift off.
+- A slow pointer draws the fish school closer. A fast pointer scatters it.
+- A long press drops food pellets. The pellets float, then sink, and the fish chase them.
+- A mouse drag leaves a wake and pushes the paper boats.
+- Now and then a fish jumps, with a splash, foam, and spray.
+- At night, moving water glows with bioluminescence.
+
+Links and controls keep their normal behavior, and the page keeps its touch scroll. The full, reduced, and low quality profiles reduce or remove each element. With `prefers-reduced-motion`, the scene shows one still frame and ignores input.
+
+`ocean-life-step=<seconds>` raises the largest life step per frame. Use it only with a slow software renderer, where frames are far apart.
+
 ## Codex design workflow
 
 The reliable workflow for a visual build is concept first, implementation second, browser evidence third:

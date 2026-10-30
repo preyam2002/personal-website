@@ -16,6 +16,8 @@ const programs = {
   unpack: ["fullscreenVertexShader", "unpackSpectrumShader"],
   filter: ["fullscreenVertexShader", "filterSpectrumShader"],
   foam: ["fullscreenVertexShader", "foamFragmentShader"],
+  probe: ["fullscreenVertexShader", "probeFragmentShader"],
+  glow: ["fullscreenVertexShader", "glowFragmentShader"],
   surface: ["surfaceVertexShader", "surfaceFragmentShader"],
   caustic: ["causticVertexShader", "causticFragmentShader"],
   causticBlur: ["fullscreenVertexShader", "causticBlurFragmentShader"],
