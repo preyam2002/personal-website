@@ -11,6 +11,18 @@ import { DIFFUSE_WATER_REFLECTANCE, oceanReflectionShader } from "@/lib/oceanRef
 import { FOAM_DOMAIN_METERS, FOAM_DRIFT_FRACTION, FOAM_ORIGIN, foamEvolutionShader } from "@/lib/oceanFoam";
 import { ATMOSPHERE_VIEW_SAMPLES, atmosphereOpticsShader, skyMappingShader } from "@/lib/oceanAtmosphere";
 import {
+  CAMERA_FOCAL_LENGTH,
+  CAMERA_ORIGIN_BOTTOM,
+  CAMERA_ORIGIN_TOP,
+  CAMERA_TARGET_TOP,
+  getCameraRay,
+  getOceanCamera,
+  getOceanSeedPhase,
+  intersectHorizontalPlane,
+} from "@/lib/oceanCamera";
+import { createGestureTracker, type GestureEvent } from "@/lib/oceanGestures";
+import { RIPPLE_SLOTS, createRipplePool, rippleShader } from "@/lib/oceanRipples";
+import {
   OCEAN_CASCADE_COUNT,
   OCEAN_CASCADE_LENGTHS,
   OCEAN_REPEAT_SECONDS,
@@ -84,6 +96,7 @@ type QualityProfile = {
   meshRows: number;
   name: Exclude<WaterQuality, "static">;
   pixelBudget: number;
+  rippleSlots: number;
   simulationSize: number;
 };
 
@@ -93,11 +106,7 @@ const ATMOSPHERE_TEXTURE_HEIGHT = 96;
 const OCEAN_WAVE_HEIGHT_SCALE = 1.0;
 const WATER_DOMAIN_METERS = 32;
 const OCEAN_DEPTH_METERS = 24;
-const CAMERA_FOCAL_LENGTH = 2.7;
 const CELESTIAL_DISC_SCALE = 1.8;
-const CAMERA_ORIGIN_TOP = [0, 1.2, -6.2] as const;
-const CAMERA_ORIGIN_BOTTOM = [0, -21.2, 11.8] as const;
-const CAMERA_TARGET_TOP = [0, 0.35, 0.7] as const;
 const DEFAULT_CELESTIAL_DATE = Date.UTC(2026, 5, 21, 6, 30);
 
 const FULL_QUALITY: QualityProfile = {
@@ -114,6 +123,7 @@ const FULL_QUALITY: QualityProfile = {
   meshRows: 640,
   name: "full",
   pixelBudget: 1_000_000,
+  rippleSlots: RIPPLE_SLOTS,
   simulationSize: SIMULATION_SIZE,
 };
 
@@ -131,6 +141,7 @@ const REDUCED_QUALITY: QualityProfile = {
   meshRows: 384,
   name: "reduced",
   pixelBudget: 300_000,
+  rippleSlots: 6,
   simulationSize: 128,
 };
 
@@ -148,6 +159,7 @@ const LOW_QUALITY: QualityProfile = {
   meshRows: 192,
   name: "low",
   pixelBudget: 180_000,
+  rippleSlots: 3,
   simulationSize: 64,
 };
 
@@ -347,6 +359,7 @@ uniform highp sampler2DArray u_displacement;
 uniform highp sampler2DArray u_gradient;
 uniform highp sampler2D u_distantNoise;
 const float CASCADE_LENGTHS[${OCEAN_CASCADE_COUNT}] = float[${OCEAN_CASCADE_COUNT}](${OCEAN_CASCADE_LENGTHS.map(value => value.toFixed(2)).join(", ")});
+${rippleShader}
 
 vec4 cubicWeights(float t) {
   float t2 = t * t;
@@ -465,7 +478,8 @@ vec3 oceanDisplacement(vec2 position, float footprint) {
     }
     displacement += wave;
   }
-  return displacement * vec3(u_choppiness, ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)}, u_choppiness);
+  return displacement * vec3(u_choppiness, ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)}, u_choppiness)
+    + vec3(0.0, rippleField(position, footprint).x, 0.0);
 }
 
 float oceanHeight(vec2 position, float footprint) {
@@ -519,6 +533,7 @@ void oceanDerivatives(vec2 position, float footprint, out vec2 slope, out mat2 j
     jacobian += waveJacobian;
   }
   slope *= ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)};
+  slope += rippleField(position, footprint).yz;
 }
 
 vec3 surfaceNormal(vec2 position, float footprint) {
@@ -1268,7 +1283,8 @@ void opticalSurface(
   variance = max(0.5 * vec2(a + c + difference, a + c - difference), vec2(0.00000001));
   varianceDirection = axis.x * u_windDirection + axis.y * acrossWind;
   variance *= ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)} * ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)};
-  slope = transpose(inverseJacobian) * slope * ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)};
+  slope = slope * ${OCEAN_WAVE_HEIGHT_SCALE.toFixed(2)} + rippleField(position, sqrt(major * minor)).yz;
+  slope = transpose(inverseJacobian) * slope;
   normal = normalize(vec3(-slope.x, 1.0, -slope.y));
 }
 
@@ -2112,6 +2128,24 @@ function getUniform(
   return uniform;
 }
 
+type RippleUniforms = {
+  ripples: WebGLUniformLocation | null;
+  count: WebGLUniformLocation | null;
+};
+
+/** Find the ripple uniforms. A program that never reads the ripples has none. */
+function getRippleUniforms(gl: WebGL2RenderingContext, program: WebGLProgram): RippleUniforms {
+  return {
+    ripples: gl.getUniformLocation(program, "u_ripples[0]"),
+    count: gl.getUniformLocation(program, "u_rippleCount"),
+  };
+}
+
+export type RippleFrame = {
+  data: Float32Array;
+  count: number;
+};
+
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
   const vertexArray = gl.createVertexArray();
   const buffer = gl.createBuffer();
@@ -2302,23 +2336,19 @@ function createCascadeTexture(gl: WebGL2RenderingContext, size: number) {
 
 const CROSSING_RENDER_SCALE = 0.8;
 const FRAME_INTERVAL_TOLERANCE = 2.5;
+// Input acts on the water only while the camera sits above the surface.
+const INTERACTION_SCROLL_LIMIT = 0.16;
+const INTERACTION_DISTANCE = 40;
+const TAP_RIPPLE_AMPLITUDE = 0.14;
+const MAX_LIFE_STEP_SECONDS = 0.1;
+const INTERACTIVE_SELECTOR = [
+  "a", "button", "input", "select", "textarea", "label", "summary",
+  "[role='slider']", "[role='button']", "[contenteditable='true']",
+].join(", ");
 
 function smoothstep(edge0: number, edge1: number, value: number) {
   const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
-}
-
-/** Mirror the shader camera path so the CPU can predict the surface crossing. */
-function getCameraPosition(scroll: number, seedPhase: number) {
-  const entry = smoothstep(0, 0.205, scroll);
-  const deepDescent = smoothstep(0.19, 0.96, scroll);
-  const entryY = CAMERA_ORIGIN_TOP[1] + (-0.16 - CAMERA_ORIGIN_TOP[1]) * entry;
-  const entryZ = CAMERA_ORIGIN_TOP[2] + (-2.75 - CAMERA_ORIGIN_TOP[2]) * entry;
-  const y = entryY + (CAMERA_ORIGIN_BOTTOM[1] - entryY) * deepDescent;
-  const x = Math.sin(scroll * 5.1 + seedPhase) * 2.4 * deepDescent;
-  const z = entryZ + (CAMERA_ORIGIN_BOTTOM[2] - entryZ) * deepDescent
-    + Math.sin(scroll * 2.7 + seedPhase * 1.7) * 1.2 * deepDescent;
-  return { x, y, z };
 }
 
 function getHorizonBand(scroll: number, height: number) {
@@ -2351,10 +2381,9 @@ function getCrossingRenderScale(
   scroll: number,
   oceanTime: number,
 ) {
-  const seedPhase = ((waveField.seed % 100_000) / 100_000) * Math.PI * 2;
-  const camera = getCameraPosition(scroll, seedPhase);
-  const surface = spectralHeightAt(waveField, camera.x, camera.z, oceanTime);
-  const proximity = 1 - smoothstep(0.32, 0.62, Math.abs(camera.y - surface));
+  const [x, y, z] = getOceanCamera(scroll, getOceanSeedPhase(waveField.seed)).origin;
+  const surface = spectralHeightAt(waveField, x, z, oceanTime);
+  const proximity = 1 - smoothstep(0.32, 0.62, Math.abs(y - surface));
   return 1 + (CROSSING_RENDER_SCALE - 1) * proximity;
 }
 
@@ -2409,7 +2438,10 @@ async function createPondEngine(
     if (compiled.status === "fulfilled") {
       Object.values(compiled.value).forEach(program => gl.deleteProgram(program));
     }
-    throw new Error("Ocean initialization did not complete");
+    const failure = [prepared, compiled].find(result => result.status === "rejected");
+    throw new Error(failure?.status === "rejected" && failure.reason instanceof Error && !signal.aborted
+      ? failure.reason.message
+      : "Ocean initialization did not complete");
   }
   const { cascades, mesh, noise } = prepared.value;
   const {
@@ -2708,6 +2740,18 @@ async function createPondEngine(
     absorption: getUniform(gl, displayProgram, "u_absorption"),
   };
 
+  const rippleUniforms = {
+    foam: getRippleUniforms(gl, foamProgram),
+    surface: getRippleUniforms(gl, surfaceProgram),
+    caustic: getRippleUniforms(gl, causticProgram),
+    display: getRippleUniforms(gl, displayProgram),
+  };
+  let rippleFrame: RippleFrame = { data: new Float32Array(RIPPLE_SLOTS * 4), count: 0 };
+  const applyRipples = (uniforms: RippleUniforms) => {
+    if (uniforms.count) gl.uniform1i(uniforms.count, Math.min(rippleFrame.count, quality.rippleSlots));
+    if (uniforms.ripples && rippleFrame.count > 0) gl.uniform4fv(uniforms.ripples, rippleFrame.data);
+  };
+
   gl.useProgram(evolveProgram);
   gl.uniform1i(evolveUniforms.initial, 0);
   gl.uniform1i(evolveUniforms.size, quality.simulationSize);
@@ -2841,6 +2885,7 @@ async function createPondEngine(
     bindTexture(gl, foamTargets[foamIndex].texture, 1);
     gl.uniform1f(foamUniforms.oceanTime, oceanTime);
     gl.uniform1f(foamUniforms.seconds, seconds);
+    applyRipples(rippleUniforms.foam);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, foamTargets[next].framebuffer);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, foamDisplay.framebuffer);
@@ -2934,6 +2979,7 @@ async function createPondEngine(
     bindArrayTexture(gl, displacementTexture, 0);
     bindArrayTexture(gl, gradientTexture, 3);
     gl.uniform1f(causticUniforms.oceanTime, oceanTime);
+    applyRipples(rippleUniforms.caustic);
     gl.uniform3f(
       causticUniforms.sunDirection,
       lightDirection[0],
@@ -3020,6 +3066,7 @@ async function createPondEngine(
     gl.uniform2f(surfaceUniforms.resolution, width, height);
     gl.uniform1f(surfaceUniforms.scroll, scroll);
     gl.uniform1f(surfaceUniforms.oceanTime, oceanTime);
+    applyRipples(rippleUniforms.surface);
     gl.drawElements(gl.TRIANGLES, surfaceGeometry.count, gl.UNSIGNED_INT, 0);
     gl.invalidateFramebuffer(gl.FRAMEBUFFER, [gl.DEPTH_ATTACHMENT]);
     gl.disable(gl.DEPTH_TEST);
@@ -3033,7 +3080,9 @@ async function createPondEngine(
     scroll: number,
     light: SceneLight,
     oceanTime: number,
+    ripples: RippleFrame,
   ) => {
+    rippleFrame = ripples;
     if (oceanTime !== spectrumTime) {
       renderSpectrum(oceanTime);
       renderFoam(oceanTime);
@@ -3144,6 +3193,7 @@ async function createPondEngine(
       displayLight = light;
     }
     gl.uniform1f(displayUniforms.oceanTime, oceanTime);
+    applyRipples(rippleUniforms.display);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
     if (scaled) {
@@ -3328,6 +3378,8 @@ export default function PondSurface({
     }
 
     const previewTime = getPreviewNumber("ocean-time");
+    // A slow software renderer can raise this limit to see real-time life motion.
+    const lifeStepLimit = getPreviewNumber("ocean-life-step") ?? MAX_LIFE_STEP_SECONDS;
     const previewSeed = getPreviewNumber("ocean-seed");
     const previewDate = Date.parse(new URLSearchParams(window.location.search).get("ocean-date") ?? "");
     const previewCelestial = Number.isFinite(previewDate)
@@ -3348,6 +3400,13 @@ export default function PondSurface({
     let renderedScrollProgress = 0;
     let isVisible = true;
     let reducedMotion = motionQuery.matches;
+
+    const seedPhase = getOceanSeedPhase(waveField.seed);
+    const ripples = createRipplePool(quality.rippleSlots);
+    const rippleFrame: RippleFrame = { data: new Float32Array(RIPPLE_SLOTS * 4), count: 0 };
+    const gestures = createGestureTracker();
+    // Real seconds of scene motion. Ripples and other life use this clock.
+    let lifeTime = 0;
 
     const frameGate = createWebGLFrameGate(gl);
     const frameBudget = createWaterFrameBudget(frameInterval, quality.name);
@@ -3511,7 +3570,11 @@ export default function PondSurface({
 
       if (!reducedMotion && previewTime === null) {
         oceanTime += (warmingUp ? startupFrames === 0 ? 0 : 1 / 30 : frameSeconds) * OCEAN_PLAYBACK_RATE;
+        if (!warmingUp) lifeTime += Math.min(frameSeconds, lifeStepLimit);
       }
+      if (isInteractive()) handleGestures(gestures.poll(timestamp));
+      else gestures.cancel();
+      rippleFrame.count = ripples.pack(lifeTime, rippleFrame.data);
 
       const currentCelestial = previewCelestial ?? celestialRef.current;
       if (currentCelestial !== lightState || renderWidth !== lightWidth || renderHeight !== lightHeight) {
@@ -3528,6 +3591,7 @@ export default function PondSurface({
         renderedScrollProgress,
         sceneLight,
         oceanTime,
+        rippleFrame,
       );
       frameGate.submit();
       startupFrames += 1;
@@ -3538,6 +3602,46 @@ export default function PondSurface({
         animationFrame = window.requestAnimationFrame(draw);
       }
     };
+
+    const isInteractive = () => engine !== null
+      && !reducedMotion
+      && previewTime === null
+      && canvas.dataset.webgl === "active"
+      && renderedScrollProgress < INTERACTION_SCROLL_LIMIT;
+
+    const toWaterPoint = (clientX: number, clientY: number) => {
+      const bounds = canvas.getBoundingClientRect();
+      const aspect = bounds.width / Math.max(bounds.height, 1);
+      const x = ((clientX - bounds.left) / Math.max(bounds.width, 1) * 2 - 1) * aspect;
+      const y = 1 - (clientY - bounds.top) / Math.max(bounds.height, 1) * 2;
+      const camera = getOceanCamera(renderedScrollProgress, seedPhase);
+      if (camera.origin[1] < 0.2) return null;
+      return intersectHorizontalPlane(camera.origin, getCameraRay(camera, x, y), 0, INTERACTION_DISTANCE);
+    };
+
+    const handleGestures = (events: GestureEvent[]) => {
+      for (const event of events) {
+        if (event.type !== "tap") continue;
+        const point = toWaterPoint(event.x, event.y);
+        if (point) ripples.add(point[0], point[2], TAP_RIPPLE_AMPLITUDE, lifeTime);
+      }
+    };
+
+    const isSceneTarget = (event: PointerEvent) =>
+      !(event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR));
+    const onPointerDown = (event: PointerEvent) => {
+      if (!event.isPrimary || event.button !== 0 || !isInteractive() || !isSceneTarget(event)) return;
+      gestures.down(event.pointerId, event.clientX, event.clientY, event.timeStamp);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!event.isPrimary) return;
+      handleGestures(gestures.move(event.pointerId, event.clientX, event.clientY, event.timeStamp));
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (!event.isPrimary || !isInteractive()) return;
+      handleGestures(gestures.up(event.pointerId, event.clientX, event.clientY, event.timeStamp));
+    };
+    const onPointerCancel = (event: PointerEvent) => gestures.cancel(event.pointerId);
 
     canvas.dataset.renderScale = "1";
     const onResize = () => {
@@ -3598,6 +3702,11 @@ export default function PondSurface({
     motionQuery.addEventListener("change", onMotionChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("scroll", onScroll, { passive: true });
+    // Passive listeners on the window: the page keeps its scroll, links, and text selection.
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerup", onPointerUp, { passive: true });
+    window.addEventListener("pointercancel", onPointerCancel, { passive: true });
     canvas.addEventListener("webglcontextlost", onContextLost);
     canvas.addEventListener("webglcontextrestored", onContextRestored);
     canvas.dataset.quality = quality.name;
@@ -3626,6 +3735,10 @@ export default function PondSurface({
       motionQuery.removeEventListener("change", onMotionChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       canvas.removeEventListener("webglcontextlost", onContextLost);
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
       frameGate.dispose();
