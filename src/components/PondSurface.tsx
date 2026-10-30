@@ -3080,9 +3080,6 @@ async function createPondEngine(
   gl.uniform1i(displayUniforms.probeSurface, 10);
   gl.uniform1i(displayUniforms.sprayDroplets, quality.sprayDroplets);
   gl.uniform1i(displayUniforms.glow, 11);
-  gl.useProgram(glowProgram);
-  gl.uniform1i(glowUniforms.previous, 1);
-  gl.uniform1i(glowUniforms.actors, 9);
   gl.uniform1f(displayUniforms.gridSize, quality.simulationSize);
   gl.uniform1f(displayUniforms.domainSize, WATER_DOMAIN_METERS);
   gl.uniform1f(displayUniforms.floorDepth, OCEAN_DEPTH_METERS);
@@ -3093,6 +3090,10 @@ async function createPondEngine(
     WATER_ABSORPTION_RGB_PER_METER[1],
     WATER_ABSORPTION_RGB_PER_METER[2],
   );
+
+  gl.useProgram(glowProgram);
+  gl.uniform1i(glowUniforms.previous, 1);
+  gl.uniform1i(glowUniforms.actors, 9);
 
   let atmosphereLightSignature = "";
   let atmosphereLight: SceneLight | null = null;
