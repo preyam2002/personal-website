@@ -21,7 +21,8 @@ export type PaperBoat = {
   normal: Vector3;
 };
 
-const START_ANCHORS: [number, number][] = [[-1.6, 2.4], [1.9, 0.6], [0.3, 6.5]];
+// The first anchors stay near the center, so a narrow phone view still shows the boats of the smaller profiles.
+const START_ANCHORS: [number, number][] = [[0.3, 6.5], [-1.1, 3.2], [1.9, 0.6]];
 
 export function createBoats(count: number, random: () => number): PaperBoat[] {
   return START_ANCHORS.slice(0, Math.min(count, BOAT_SLOTS)).map(([x, z], index) => ({
