@@ -3,6 +3,11 @@ import { getOceanCamera } from "./oceanCamera";
 import {
   ACTOR_TEXTURE_WIDTH,
   FISH_BOUND_RADIUS,
+  SPLASH_LIFETIME_SECONDS,
+  SPLASH_SLOTS,
+  SPRAY_LIFETIME_SECONDS,
+  addSplash,
+  packSplashes,
   FISH_CRUISE_SPEED,
   FISH_DART_SPEED,
   FISH_MIN_SPEED,
@@ -22,6 +27,7 @@ import {
   type LifeEvent,
   type Pellet,
   type SchoolEnvironment,
+  type Splash,
 } from "./oceanLife";
 import { seededRandom } from "./oceanWaves";
 
@@ -140,11 +146,16 @@ describe("fish jumps", () => {
     const school = [fish([0, -0.6, 5], [0.5, 0, 0])];
     expect(startFishJump(school, seededRandom(2), () => true)).toBe(school[0]);
     let highest = -Infinity;
+    let largestStep = 0;
     const events: LifeEvent[] = [];
     for (let step = 0; step < 240; step += 1) {
+      const before = [...school[0].position];
       stepSchool(school, environment({ time: step / 60 }), 1 / 60, events);
       highest = Math.max(highest, school[0].position[1]);
+      largestStep = Math.max(largestStep, distance(before, school[0].position));
     }
+    // The fish moves continuously: no stage change makes it jump in place.
+    expect(largestStep).toBeLessThan(0.1);
     expect(events.map(event => event.type)).toEqual(["breach", "splash"]);
     expect(highest).toBeGreaterThan(0.2);
     expect(highest).toBeLessThan(0.8);
@@ -257,5 +268,34 @@ describe("pellet packing", () => {
     expect(bounds.airLow[0]).toBeLessThanOrEqual(pellets[0].position[0]);
     expect(bounds.airHigh[0]).toBeGreaterThanOrEqual(pellets[0].position[0]);
     expect(bounds.airLow[1]).toBeGreaterThan(-1);
+  });
+});
+
+describe("splashes", () => {
+  const splash = (start: number, x = 0): Splash => ({
+    position: [x, 0.1, 4], start, strength: 1, heading: [1, 0], seed: 3,
+  });
+
+  it("keeps the newest splashes and packs position, age, strength, heading, and seed", () => {
+    const splashes: Splash[] = [];
+    for (let index = 0; index <= SPLASH_SLOTS; index += 1) addSplash(splashes, splash(index * 0.1, index));
+    expect(splashes.map(entry => entry.position[0])).toEqual([1, 2, 3, 4]);
+    const data = new Float32Array(SPLASH_SLOTS * 8);
+    const bounds = packSchool([], new Float32Array(ACTOR_TEXTURE_WIDTH * 16), flat);
+    expect(packSplashes(splashes, 0.5, data, bounds)).toBe(SPLASH_SLOTS);
+    expect(Array.from(data.subarray(0, 8))).toEqual([1, Math.fround(0.1), 4, Math.fround(0.4), 1, 1, 0, 3]);
+    expect(bounds.airLow[1]).toBeLessThan(0.1);
+    expect(bounds.airHigh[1]).toBeGreaterThan(1);
+  });
+
+  it("drops expired splashes and grows the air bounds only while spray flies", () => {
+    const splashes = [splash(0), splash(2)];
+    const data = new Float32Array(SPLASH_SLOTS * 8);
+    const bounds = packSchool([], new Float32Array(ACTOR_TEXTURE_WIDTH * 16), flat);
+    const now = 2 + SPRAY_LIFETIME_SECONDS + 0.4;
+    expect(now).toBeGreaterThan(SPLASH_LIFETIME_SECONDS);
+    expect(packSplashes(splashes, now, data, bounds)).toBe(1);
+    expect(data[3]).toBeCloseTo(now - 2, 6);
+    expect(bounds.airLow[0]).toBeGreaterThan(bounds.airHigh[0]);
   });
 });

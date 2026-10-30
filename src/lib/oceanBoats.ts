@@ -1,5 +1,5 @@
 import type { Vector3 } from "./oceanCamera";
-import { ACTOR_TEXTURE_WIDTH, FLOATING_MARGIN, PELLET_SLOTS, type SchoolBounds } from "./oceanLife";
+import { ACTOR_TEXTURE_WIDTH, FLOATING_MARGIN, PELLET_SLOTS, growBounds, type SchoolBounds } from "./oceanLife";
 import type { ProbeSample } from "./oceanProbes";
 
 export const BOAT_SLOTS = 3;
@@ -120,7 +120,7 @@ export function placeBoat(boat: PaperBoat, sample: ProbeSample, seconds: number)
 }
 
 /**
- * Write the boats into row 3 after the pellets and grow both bounds.
+ * Write the boats into row 3 after the pellets and grow the boat bounds.
  *
  * Each boat uses two texels: (probe slot, 0, 0, length) and
  * (0, 0, 0, tint * 10 + yaw). The shader reads the position and the normal
@@ -143,16 +143,7 @@ export function packBoats(
     data.set([slot, 0, 0, length], texel);
     data.set([0, 0, 0, Math.round(tint * 2) * 10 + turn], texel + 4);
     const radius = length * (BOAT_BOUND_RADIUS + 0.3) + FLOATING_MARGIN;
-    for (const [low, high] of [[bounds.low, bounds.high], [bounds.airLow, bounds.airHigh]]) {
-      if (low[0] > high[0]) {
-        low.fill(Infinity);
-        high.fill(-Infinity);
-      }
-      for (let axis = 0; axis < 3; axis += 1) {
-        low[axis] = Math.min(low[axis], position[axis] - radius);
-        high[axis] = Math.max(high[axis], position[axis] + radius);
-      }
-    }
+    growBounds(bounds.boatLow, bounds.boatHigh, position, radius);
     count += 1;
   }
   return count;

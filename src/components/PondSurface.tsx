@@ -34,16 +34,21 @@ import {
   ACTOR_TEXTURE_WIDTH,
   PELLET_RADIUS,
   PELLET_SLOTS,
+  SPLASH_SLOTS,
+  addSplash,
   createSchool,
   dropPellets,
   getSchoolHome,
   packPellets,
   packSchool,
+  packSplashes,
+  startFishJump,
   stepPellets,
   stepSchool,
   type Fish,
   type LifeEvent,
   type Pellet,
+  type Splash,
   type SchoolBounds,
   type SchoolEnvironment,
   type SchoolStimulus,
@@ -139,6 +144,7 @@ type QualityProfile = {
   cloudWidth: number;
   detailLevel: number;
   fishCount: number;
+  fishJumps: boolean;
   frameInterval: number;
   meshColumns: number;
   pelletCount: number;
@@ -146,6 +152,7 @@ type QualityProfile = {
   name: Exclude<WaterQuality, "static">;
   pixelBudget: number;
   rippleSlots: number;
+  sprayDroplets: number;
   simulationSize: number;
 };
 
@@ -169,6 +176,7 @@ const FULL_QUALITY: QualityProfile = {
   cloudWidth: 1024,
   detailLevel: 1,
   fishCount: 36,
+  fishJumps: true,
   frameInterval: 1_000 / 60,
   meshColumns: 384,
   meshRows: 640,
@@ -176,6 +184,7 @@ const FULL_QUALITY: QualityProfile = {
   name: "full",
   pixelBudget: 1_000_000,
   rippleSlots: RIPPLE_SLOTS,
+  sprayDroplets: 18,
   simulationSize: SIMULATION_SIZE,
 };
 
@@ -190,6 +199,7 @@ const REDUCED_QUALITY: QualityProfile = {
   cloudWidth: 512,
   detailLevel: 0,
   fishCount: 18,
+  fishJumps: true,
   frameInterval: 1_000 / 30,
   meshColumns: 192,
   meshRows: 384,
@@ -197,6 +207,7 @@ const REDUCED_QUALITY: QualityProfile = {
   name: "reduced",
   pixelBudget: 300_000,
   rippleSlots: 6,
+  sprayDroplets: 10,
   simulationSize: 128,
 };
 
@@ -211,6 +222,7 @@ const LOW_QUALITY: QualityProfile = {
   cloudWidth: 384,
   detailLevel: 0,
   fishCount: 0,
+  fishJumps: false,
   frameInterval: 1_000 / 30,
   meshColumns: 96,
   meshRows: 192,
@@ -218,6 +230,7 @@ const LOW_QUALITY: QualityProfile = {
   name: "low",
   pixelBudget: 180_000,
   rippleSlots: 3,
+  sprayDroplets: 0,
   simulationSize: 64,
 };
 
@@ -2004,6 +2017,17 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
     }
   }
 
+  float splash = u_splashCount > 0 ? splashFoam(g_surfaceParameter) : 0.0;
+  if (splash > 0.001) {
+    float foamLight = max(dot(opticalNormal, u_primaryLightDirection), 0.0) * 0.72 + 0.08;
+    vec3 foamRadiance = vec3(0.74, 0.77, 0.79) * (
+      waterHighlightColor * foamLight * 0.42
+        + v_diffuseSkyRadiance * 0.58
+        + 0.12
+    );
+    color = mix(color, foamRadiance, splash * 0.85);
+  }
+
   vec3 horizonDirection = normalize(vec3(ray.x, 0.012, ray.z));
   vec3 horizonSky = skyBackground(horizonDirection, skyLut(horizonDirection));
   float distanceHaze = 1.0 - exp(-distanceToSurface / 2200.0);
@@ -2260,6 +2284,8 @@ export type LifeFrame = {
   boatCount: number;
   probes: Float32Array;
   probeCount: number;
+  splashes: Float32Array;
+  splashCount: number;
 };
 
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
@@ -2458,6 +2484,9 @@ const INTERACTION_DISTANCE = 40;
 const TAP_RIPPLE_AMPLITUDE = 0.14;
 const PELLET_RIPPLE_AMPLITUDE = 0.04;
 const BITE_RIPPLE_AMPLITUDE = 0.05;
+const SPLASH_RIPPLE_AMPLITUDE = 0.16;
+// Jumps start only while the camera looks across the surface.
+const JUMP_SCROLL_LIMIT = 0.1;
 const FEEDING_DISTANCE = 16;
 const MAX_DRAG_SPEED = 2.5;
 const BOAT_CONTACT_PIXELS = 28;
@@ -2887,10 +2916,15 @@ async function createPondEngine(
     pelletCount: getUniform(gl, displayProgram, "u_pelletCount"),
     boatCount: getUniform(gl, displayProgram, "u_boatCount"),
     probeSurface: getUniform(gl, displayProgram, "u_probeSurface"),
+    splashes: getUniform(gl, displayProgram, "u_splashes[0]"),
+    splashCount: getUniform(gl, displayProgram, "u_splashCount"),
+    sprayDroplets: getUniform(gl, displayProgram, "u_sprayDroplets"),
     lifeLow: getUniform(gl, displayProgram, "u_lifeLow"),
     lifeHigh: getUniform(gl, displayProgram, "u_lifeHigh"),
     airLow: getUniform(gl, displayProgram, "u_airLow"),
     airHigh: getUniform(gl, displayProgram, "u_airHigh"),
+    boatLow: getUniform(gl, displayProgram, "u_boatLow"),
+    boatHigh: getUniform(gl, displayProgram, "u_boatHigh"),
   };
 
   const rippleUniforms = {
@@ -3009,6 +3043,7 @@ async function createPondEngine(
   gl.uniform1i(displayUniforms.surfaceParameter, 6);
   gl.uniform1i(displayUniforms.actors, 9);
   gl.uniform1i(displayUniforms.probeSurface, 10);
+  gl.uniform1i(displayUniforms.sprayDroplets, quality.sprayDroplets);
   gl.uniform1f(displayUniforms.gridSize, quality.simulationSize);
   gl.uniform1f(displayUniforms.domainSize, WATER_DOMAIN_METERS);
   gl.uniform1f(displayUniforms.floorDepth, OCEAN_DEPTH_METERS);
@@ -3400,10 +3435,14 @@ async function createPondEngine(
     gl.uniform1i(displayUniforms.fishCount, school.count);
     gl.uniform1i(displayUniforms.pelletCount, life.pelletCount);
     gl.uniform1i(displayUniforms.boatCount, life.boatCount);
+    gl.uniform1i(displayUniforms.splashCount, life.splashCount);
+    if (life.splashCount > 0) gl.uniform4fv(displayUniforms.splashes, life.splashes);
     gl.uniform3f(displayUniforms.lifeLow, school.low[0], school.low[1], school.low[2]);
     gl.uniform3f(displayUniforms.lifeHigh, school.high[0], school.high[1], school.high[2]);
     gl.uniform3f(displayUniforms.airLow, school.airLow[0], school.airLow[1], school.airLow[2]);
     gl.uniform3f(displayUniforms.airHigh, school.airHigh[0], school.airHigh[1], school.airHigh[2]);
+    gl.uniform3f(displayUniforms.boatLow, school.boatLow[0], school.boatLow[1], school.boatLow[2]);
+    gl.uniform3f(displayUniforms.boatHigh, school.boatHigh[0], school.boatHigh[1], school.boatHigh[2]);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
     if (scaled) {
@@ -3682,17 +3721,29 @@ export default function PondSurface({
     };
     const lifeRandom = seededRandom((waveField.seed ^ 0x51f15e) >>> 0);
     const surfaceAt = (x: number, z: number) => spectralHeightAt(waveField, x, z, oceanTime);
+    const lifeSurfaceAt = (x: number, z: number) => {
+      const height = surfaceAt(x, z);
+      if (!jumper) return height;
+      return Math.hypot(x - jumper.position[0], z - jumper.position[2]) < 1 ? height + jumpResidual : height;
+    };
     const schoolEnvironment = (scroll: number): SchoolEnvironment => ({
       time: lifeTime,
       home: getSchoolHome(lifeTime, getOceanCamera(scroll, seedPhase), scroll, -OCEAN_DEPTH_METERS),
       homeRadius: 2.2,
       floor: -OCEAN_DEPTH_METERS,
-      surfaceAt,
+      surfaceAt: lifeSurfaceAt,
       stimuli,
       pellets,
     });
     const school: Fish[] = createSchool(quality.fishCount, schoolEnvironment(0).home, lifeRandom);
     const boats: PaperBoat[] = createBoats(quality.boatCount, lifeRandom);
+    const splashes: Splash[] = [];
+    let jumper: Fish | null = null;
+    let nextJumpAt = 5 + lifeRandom() * 6;
+    // The wind sea under the jumper, from its probe. The swell alone misses it.
+    let jumpResidual = 0;
+    const isJumpVisible = (fish: Fish) => Math.abs(fish.position[0]) < 2.6
+      && fish.position[2] > -3.5 && fish.position[2] < 5.5 && fish.position[1] > -1.8;
     // Settle the school before the first frame, so a still frame shows a formed school.
     for (let step = 0; step < 90; step += 1) stepSchool(school, schoolEnvironment(0), 1 / 30);
     const actors = new Float32Array(ACTOR_TEXTURE_WIDTH * ACTOR_TEXTURE_ROWS * 4);
@@ -3703,19 +3754,40 @@ export default function PondSurface({
       boatCount: 0,
       probes: new Float32Array(PROBE_SLOTS * 4),
       probeCount: 0,
+      splashes: new Float32Array(SPLASH_SLOTS * 8),
+      splashCount: 0,
     };
     const lifeEvents: LifeEvent[] = [];
     const advanceLife = (seconds: number) => {
       const steps = Math.ceil(seconds / LIFE_SUBSTEP_SECONDS);
       lifeEvents.length = 0;
+      if (quality.fishJumps && !jumper && lifeTime >= nextJumpAt) {
+        jumper = renderedScrollProgress < JUMP_SCROLL_LIMIT ? startFishJump(school, lifeRandom, isJumpVisible) : null;
+        nextJumpAt = lifeTime + (jumper ? 7 + lifeRandom() * 9 : 2);
+      }
       for (let step = 0; step < steps; step += 1) {
         stepSchool(school, schoolEnvironment(renderedScrollProgress), seconds / steps, lifeEvents);
       }
       stepPellets(pellets, seconds, surfaceAt);
       stepBoats(boats, seconds, waveField.windDirection);
+      if (jumper && !jumper.jump) jumper = null;
       for (const event of lifeEvents) {
         if (event.type === "bite" && event.floating) {
           ripples.add(event.position[0], event.position[2], BITE_RIPPLE_AMPLITUDE, lifeTime);
+        } else if (event.type === "breach" || event.type === "splash") {
+          const [x, y, z] = event.position;
+          const strength = event.type === "splash" ? 1 : 0.7;
+          const speed = Math.hypot(event.velocity[0], event.velocity[2]) || 1;
+          ripples.add(x, z, SPLASH_RIPPLE_AMPLITUDE * strength, lifeTime);
+          pushBoatsFromRipple(boats, x, z, 0.2 * strength);
+          threats.push({ point: [x, -0.5, z], until: lifeTime + 0.4 });
+          addSplash(splashes, {
+            position: [x, y, z],
+            start: lifeTime,
+            strength,
+            heading: [event.velocity[0] / speed, event.velocity[2] / speed],
+            seed: lifeRandom() * 100,
+          });
         }
       }
     };
@@ -3727,6 +3799,14 @@ export default function PondSurface({
         placeBoat(boat, floatingSurface(key, boat.anchor[0], boat.anchor[1]), seconds);
         requests.push({ key, x: boat.anchor[0], z: boat.anchor[1], mode: "floating", footprint: 0.2 });
       });
+      const jumpSample = probeSamples.get("jump");
+      const jumpRequest = probeOrigin.requests[probeOrigin.keys.indexOf("jump")];
+      jumpResidual = jumpSample && jumpRequest
+        ? jumpSample.position[1] - spectralHeightAt(waveField, jumpRequest.x, jumpRequest.z, probeOrigin.time)
+        : 0;
+      if (jumper) {
+        requests.push({ key: "jump", x: jumper.position[0], z: jumper.position[2], mode: "fixed", footprint: 0.1 });
+      }
       for (const pellet of pellets) {
         if (!pellet.floating) continue;
         const key = `pellet:${pellet.id}`;
@@ -3920,6 +4000,7 @@ export default function PondSurface({
         pellet => frameProbes.keys.indexOf(`pellet:${pellet.id}`));
       lifeFrame.boatCount = packBoats(boats, lifeFrame.actors, lifeFrame.school,
         index => frameProbes.keys.indexOf(`boat:${index}`));
+      lifeFrame.splashCount = packSplashes(splashes, lifeTime, lifeFrame.splashes, lifeFrame.school);
 
       const currentCelestial = previewCelestial ?? celestialRef.current;
       if (currentCelestial !== lightState || renderWidth !== lightWidth || renderHeight !== lightHeight) {

@@ -12,7 +12,7 @@ export const FISH_FEEDING_CLEARANCE = 0.1;
 export const FISH_FLOOR_CLEARANCE = 1.2;
 export const FISH_FOOD_RADIUS = 7;
 export const FISH_BITE_RADIUS = 0.12;
-export const FISH_JUMP_SPEED = 2.8;
+export const FISH_JUMP_SPEED = 3;
 export const PELLET_RADIUS = 0.028;
 export const PELLET_LIFETIME_SECONDS = 45;
 export const PELLET_DISSOLVE_DEPTH = 4;
@@ -132,18 +132,20 @@ function stepJump(fish: Fish, environment: SchoolEnvironment, seconds: number, e
   const { position, velocity } = fish;
   jump.time += seconds;
   const surface = environment.surfaceAt(position[0], position[2]);
+  const horizontal = Math.hypot(velocity[0], velocity[2]) || 1;
+  const headingX = velocity[0] / horizontal;
+  const headingZ = velocity[2] / horizontal;
   if (jump.stage === "rise") {
-    const horizontal = Math.hypot(velocity[0], velocity[2]) || 1;
-    const target: Vector3 = [
-      velocity[0] / horizontal * FISH_JUMP_SPEED * 0.5,
-      FISH_JUMP_SPEED,
-      velocity[2] / horizontal * FISH_JUMP_SPEED * 0.5,
-    ];
+    const target: Vector3 = [headingX * FISH_JUMP_SPEED * 0.5, FISH_JUMP_SPEED, headingZ * FISH_JUMP_SPEED * 0.5];
     const blend = 1 - Math.exp(-seconds * 9);
     for (let axis = 0; axis < 3; axis += 1) velocity[axis] += (target[axis] - velocity[axis]) * blend;
     if (position[1] >= surface) {
       jump.stage = "air";
       jump.time = 0;
+      // Leave the water at the full launch speed, so every jump clears the surface.
+      velocity[0] = headingX * FISH_JUMP_SPEED * 0.45;
+      velocity[1] = FISH_JUMP_SPEED;
+      velocity[2] = headingZ * FISH_JUMP_SPEED * 0.45;
       events.push({ type: "breach", position: [position[0], surface, position[2]], velocity: [...velocity] });
     } else if (jump.time > 2.5) {
       fish.jump = null;
@@ -156,11 +158,11 @@ function stepJump(fish: Fish, environment: SchoolEnvironment, seconds: number, e
       events.push({ type: "splash", position: [position[0], surface, position[2]], velocity: [...velocity] });
     }
   } else {
-    const drag = Math.exp(-seconds * 3.2);
-    velocity[0] *= drag;
-    velocity[1] = velocity[1] * drag + 1.5 * seconds;
-    velocity[2] *= drag;
-    if (jump.time > 0.7) fish.jump = null;
+    // Water drag turns the dive into a forward glide below the surface.
+    const target: Vector3 = [headingX * 0.9, -1.1, headingZ * 0.9];
+    const blend = 1 - Math.exp(-seconds * 5);
+    for (let axis = 0; axis < 3; axis += 1) velocity[axis] += (target[axis] - velocity[axis]) * blend;
+    if (jump.time > 0.6) fish.jump = null;
   }
   for (let axis = 0; axis < 3; axis += 1) position[axis] += velocity[axis] * seconds;
 }
@@ -413,7 +415,21 @@ export type SchoolBounds = {
   high: Vector3;
   airLow: Vector3;
   airHigh: Vector3;
+  boatLow: Vector3;
+  boatHigh: Vector3;
 };
+
+/** Grow a box to hold a sphere. A box with its low corner above its high corner is empty. */
+export function growBounds(low: Vector3, high: Vector3, center: readonly number[], radius: number) {
+  if (low[0] > high[0]) {
+    low.fill(Infinity);
+    high.fill(-Infinity);
+  }
+  for (let axis = 0; axis < 3; axis += 1) {
+    low[axis] = Math.min(low[axis], center[axis] - radius);
+    high[axis] = Math.max(high[axis], center[axis] + radius);
+  }
+}
 
 /**
  * Write the school into rows 0 to 2 of the actor texture.
@@ -460,6 +476,8 @@ export function packSchool(
     high: empty(high, -1),
     airLow: empty(airLow, 1),
     airHigh: empty(airHigh, -1),
+    boatLow: [1, 1, 1],
+    boatHigh: [-1, -1, -1],
   };
 }
 
@@ -502,28 +520,59 @@ export function packPellets(
   probeSlot: (pellet: Pellet) => number,
 ) {
   const count = Math.min(pellets.length, PELLET_SLOTS);
-  const grow = (low: Vector3, high: Vector3, position: Vector3, margin: number) => {
-    if (low[0] > high[0]) {
-      low.fill(Infinity);
-      high.fill(-Infinity);
-    }
-    for (let axis = 0; axis < 3; axis += 1) {
-      low[axis] = Math.min(low[axis], position[axis] - margin);
-      high[axis] = Math.max(high[axis], position[axis] + margin);
-    }
-  };
   for (let index = 0; index < count; index += 1) {
     const pellet = pellets[index];
     const slot = pellet.floating ? probeSlot(pellet) : -1;
     const texel = (ACTOR_TEXTURE_WIDTH * 3 + index) * 4;
     if (slot >= 0) {
       data.set([slot, 0, 0, -PELLET_RADIUS], texel);
-      grow(bounds.low, bounds.high, pellet.position, PELLET_RADIUS + FLOATING_MARGIN);
-      grow(bounds.airLow, bounds.airHigh, pellet.position, PELLET_RADIUS + FLOATING_MARGIN);
+      growBounds(bounds.low, bounds.high, pellet.position, PELLET_RADIUS + FLOATING_MARGIN);
+      growBounds(bounds.airLow, bounds.airHigh, pellet.position, PELLET_RADIUS + FLOATING_MARGIN);
     } else {
       data.set([...pellet.position, PELLET_RADIUS], texel);
-      grow(bounds.low, bounds.high, pellet.position, PELLET_RADIUS);
+      growBounds(bounds.low, bounds.high, pellet.position, PELLET_RADIUS);
     }
   }
   return count;
+}
+
+export const SPLASH_SLOTS = 4;
+export const SPLASH_LIFETIME_SECONDS = 2.6;
+export const SPRAY_LIFETIME_SECONDS = 1.1;
+// Spray droplets stay inside this radius, scaled by the splash strength.
+export const SPRAY_REACH = 1.6;
+
+export type Splash = {
+  position: Vector3;
+  start: number;
+  strength: number;
+  heading: [number, number];
+  seed: number;
+};
+
+/** Add a splash. A full list drops its oldest splash. */
+export function addSplash(splashes: Splash[], splash: Splash) {
+  if (splashes.length >= SPLASH_SLOTS) splashes.shift();
+  splashes.push(splash);
+}
+
+/**
+ * Write the live splashes as pairs of (position, age) and
+ * (strength, heading, seed), drop expired splashes, and grow the air bounds
+ * to hold the spray.
+ */
+export function packSplashes(splashes: Splash[], now: number, data: Float32Array, bounds: SchoolBounds) {
+  for (let index = splashes.length - 1; index >= 0; index -= 1) {
+    if (now - splashes[index].start > SPLASH_LIFETIME_SECONDS) splashes.splice(index, 1);
+  }
+  data.fill(0);
+  splashes.forEach((splash, index) => {
+    data.set([...splash.position, now - splash.start], index * 8);
+    data.set([splash.strength, ...splash.heading, splash.seed], index * 8 + 4);
+    if (now - splash.start < SPRAY_LIFETIME_SECONDS) {
+      growBounds(bounds.airLow, bounds.airHigh,
+        [splash.position[0], splash.position[1] + 0.4, splash.position[2]], SPRAY_REACH * splash.strength + 0.2);
+    }
+  });
+  return splashes.length;
 }

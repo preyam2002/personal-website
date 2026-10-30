@@ -1,5 +1,13 @@
 import { BOAT_BOUND_RADIUS, BOAT_DRAFT, BOAT_SLOTS } from "./oceanBoats";
-import { ACTOR_TEXTURE_WIDTH, FISH_BOUND_RADIUS, PELLET_SLOTS } from "./oceanLife";
+import {
+  ACTOR_TEXTURE_WIDTH,
+  FISH_BOUND_RADIUS,
+  PELLET_SLOTS,
+  SPLASH_LIFETIME_SECONDS,
+  SPLASH_SLOTS,
+  SPRAY_LIFETIME_SECONDS,
+  SPRAY_REACH,
+} from "./oceanLife";
 
 /**
  * Ray-marched fish for the display shader.
@@ -15,10 +23,15 @@ uniform highp int u_fishCount;
 uniform highp int u_pelletCount;
 uniform highp int u_boatCount;
 uniform highp sampler2D u_probeSurface;
+uniform vec4 u_splashes[${SPLASH_SLOTS * 2}];
+uniform highp int u_splashCount;
+uniform highp int u_sprayDroplets;
 uniform vec3 u_lifeLow;
 uniform vec3 u_lifeHigh;
 uniform vec3 u_airLow;
 uniform vec3 u_airHigh;
+uniform vec3 u_boatLow;
+uniform vec3 u_boatHigh;
 
 bool rayBox(vec3 origin, vec3 direction, vec3 low, vec3 high, float limit) {
   if (any(greaterThan(low, high))) return false;
@@ -70,20 +83,28 @@ void fishFrame(int index, out vec3 position, out float size, out vec3 right, out
   up = cross(forward, right);
 }
 
+/** Test the bounding sphere of one fish with one texel fetch. */
+bool nearFish(int index, vec3 origin, vec3 direction, float limit, float margin) {
+  vec4 placement = texelFetch(u_actors, ivec2(index, 0), 0);
+  vec3 center = placement.xyz - origin;
+  float along = dot(center, direction);
+  float radius = placement.w * ${FISH_BOUND_RADIUS.toFixed(2)} + margin;
+  return along > -radius && along - radius < limit
+    && dot(center, center) - along * along < radius * radius;
+}
+
 bool traceFish(vec3 origin, vec3 direction, float limit, bool airOnly,
   out float hitDistance, out vec3 hitLocal, out int hitIndex) {
   hitDistance = limit;
   hitIndex = -1;
-  if (u_fishCount == 0) return false;
-  if (airOnly ? !rayBox(origin, direction, u_airLow, u_airHigh, limit)
-      : !rayBox(origin, direction, u_lifeLow, u_lifeHigh, limit)) return false;
   for (int index = 0; index < ${ACTOR_TEXTURE_WIDTH}; index += 1) {
     if (index >= u_fishCount) break;
+    if (!nearFish(index, origin, direction, hitDistance, 0.0)) continue;
+    if (airOnly && texelFetch(u_actors, ivec2(index, 2), 0).z < 0.5) continue;
     vec3 position, right, up, forward;
     float size, phase;
     vec4 style;
     fishFrame(index, position, size, right, up, forward, phase, style);
-    if (airOnly && style.z < 0.5) continue;
     vec3 relative = (origin - position) / size;
     vec3 localOrigin = vec3(dot(relative, right), dot(relative, up), dot(relative, forward));
     vec3 localDirection = vec3(dot(direction, right), dot(direction, up), dot(direction, forward));
@@ -290,26 +311,101 @@ vec3 boatRadiance(vec3 point, vec3 local, int index, vec3 direction, bool inWate
   return paper * occlusion * (sun + v_diffuseSkyRadiance * (0.6 + 0.4 * normal.y));
 }
 
+/**
+ * Test the spray droplets of the live splashes.
+ *
+ * Each droplet follows a ballistic path from its splash. A hash of the splash
+ * seed and the droplet index sets its launch velocity and size, so the CPU
+ * sends only one record per splash.
+ */
+bool traceSpray(vec3 origin, vec3 direction, inout float hitDistance, out vec3 hitNormal) {
+  bool hit = false;
+  hitNormal = vec3(0.0, 1.0, 0.0);
+  for (int splash = 0; splash < ${SPLASH_SLOTS}; splash += 1) {
+    if (splash >= u_splashCount) break;
+    vec4 place = u_splashes[splash * 2];
+    vec4 motion = u_splashes[splash * 2 + 1];
+    float age = place.w;
+    if (age > ${SPRAY_LIFETIME_SECONDS.toFixed(2)}) continue;
+    vec3 center = place.xyz + vec3(0.0, 0.4, 0.0) - origin;
+    float reach = ${SPRAY_REACH.toFixed(2)} * motion.x + 0.2;
+    float along = dot(center, direction);
+    if (dot(center, center) - along * along > reach * reach) continue;
+    for (int droplet = 0; droplet < 24; droplet += 1) {
+      if (droplet >= u_sprayDroplets) break;
+      vec3 random = hash33(vec3(float(droplet) * 1.7, motion.w, float(splash) * 7.3));
+      float angle = random.x * 6.2831853;
+      vec2 outward = vec2(cos(angle), sin(angle)) * mix(0.3, 1.3, random.y) + motion.yz * 0.7;
+      vec3 velocity = vec3(outward.x, mix(1.0, 2.6, random.z), outward.y) * motion.x;
+      vec3 droplet3 = place.xyz + velocity * age + vec3(0.0, -4.905 * age * age, 0.0);
+      if (droplet3.y < place.y - 0.03) continue;
+      float radius = mix(0.009, 0.02, fract(random.x * 37.0)) * (1.0 - 0.4 * age / ${SPRAY_LIFETIME_SECONDS.toFixed(2)});
+      vec3 relative = origin - droplet3;
+      float halfChord = dot(relative, direction);
+      float discriminant = halfChord * halfChord - dot(relative, relative) + radius * radius;
+      if (discriminant < 0.0) continue;
+      float travel = -halfChord - sqrt(discriminant);
+      if (travel > 0.0 && travel < hitDistance) {
+        hitDistance = travel;
+        hitNormal = normalize(relative + direction * travel);
+        hit = true;
+      }
+    }
+  }
+  return hit;
+}
+
+/** Return the whitewater cover of the splashes at a surface point. */
+float splashFoam(vec2 position) {
+  float foam = 0.0;
+  for (int splash = 0; splash < ${SPLASH_SLOTS}; splash += 1) {
+    if (splash >= u_splashCount) break;
+    vec4 place = u_splashes[splash * 2];
+    vec4 motion = u_splashes[splash * 2 + 1];
+    float age = place.w;
+    vec2 offset = position - place.xz;
+    float radius = 0.16 + 0.5 * sqrt(age) * motion.x;
+    float distance = length(offset);
+    if (distance > radius * 1.3) continue;
+    float cover = smoothstep(radius * 1.25, radius * 0.5, distance);
+    float bubbles = noise21(offset * 11.0 + motion.w * 31.0) * 0.6
+      + noise21(offset * 27.0 - motion.w * 17.0) * 0.4;
+    float fade = 1.0 - smoothstep(0.0, ${SPLASH_LIFETIME_SECONDS.toFixed(2)}, age);
+    foam = max(foam, cover * smoothstep(0.3, 0.7, bubbles + 0.3 * fade) * motion.x * fade);
+  }
+  return clamp(foam, 0.0, 1.0);
+}
+
 bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
   out float hitDistance, out vec3 radiance) {
   vec3 local;
   int index;
   radiance = vec3(0.0);
   hitDistance = limit;
-  if (inWater ? !rayBox(origin, direction, u_lifeLow, u_lifeHigh, limit)
-      : !rayBox(origin, direction, u_airLow, u_airHigh, limit)) return false;
-  bool fish = traceFish(origin, direction, limit, !inWater, hitDistance, local, index);
+  bool inBox = inWater ? rayBox(origin, direction, u_lifeLow, u_lifeHigh, limit)
+    : rayBox(origin, direction, u_airLow, u_airHigh, limit);
+  bool fish = inBox && u_fishCount > 0
+    && traceFish(origin, direction, limit, !inWater, hitDistance, local, index);
   vec3 boatLocal;
   int boat = -1;
-  if (u_boatCount > 0 && traceBoats(origin, direction, hitDistance, boatLocal, boat)) {
+  // Only the 2 cm below the waterline of a boat is under water. The water path skips boats.
+  if (!inWater && u_boatCount > 0 && rayBox(origin, direction, u_boatLow, u_boatHigh, hitDistance)
+    && traceBoats(origin, direction, hitDistance, boatLocal, boat)) {
     fish = false;
   }
   vec3 pelletNormal;
-  if (u_pelletCount > 0 && tracePellets(origin, direction, !inWater, hitDistance, pelletNormal)) {
+  if (inBox && u_pelletCount > 0 && tracePellets(origin, direction, !inWater, hitDistance, pelletNormal)) {
     vec3 food = vec3(0.32, 0.19, 0.08);
     radiance = inWater
       ? fishRadianceInWater(origin + direction * hitDistance, pelletNormal, direction, food, 0.0)
       : fishRadianceInAir(pelletNormal, direction, food, 0.0);
+    return true;
+  }
+  vec3 sprayNormal;
+  if (!inWater && inBox && u_splashCount > 0 && traceSpray(origin, direction, hitDistance, sprayNormal)) {
+    vec3 mirror = reflect(direction, sprayNormal);
+    radiance = v_diffuseSkyRadiance * 1.1 + primaryLightRadiance()
+      * (0.35 + 3.0 * pow(max(dot(mirror, u_primaryLightDirection), 0.0), 40.0));
     return true;
   }
   if (boat >= 0) {
@@ -340,7 +436,23 @@ bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
  */
 vec3 sampleRefractedScene(vec3 surfacePosition, vec3 incident, vec3 direction, int sampleCount) {
   vec3 origin = surfacePosition + direction * 0.025;
+  bool near = false;
   if (rayBox(origin, direction, u_lifeLow - 0.6, u_lifeHigh + 0.6, 52.0)) {
+    // The filtered normal costs many texture reads. Compute it only near a fish or a pellet.
+    for (int index = 0; index < ${ACTOR_TEXTURE_WIDTH}; index += 1) {
+      if (index >= u_fishCount || near) break;
+      near = nearFish(index, origin, direction, 52.0, 0.6);
+    }
+    for (int index = 0; index < ${PELLET_SLOTS}; index += 1) {
+      if (index >= u_pelletCount || near) break;
+      vec4 pellet = texelFetch(u_actors, ivec2(index, 3), 0);
+      if (pellet.w < 0.0) pellet.xyz = texelFetch(u_probeSurface, ivec2(int(pellet.x), 0), 0).xyz;
+      vec3 center = pellet.xyz - origin;
+      float along = dot(center, direction);
+      near = along > -0.7 && dot(center, center) - along * along < 0.49;
+    }
+  }
+  if (near) {
     vec3 calmNormal = surfaceNormal(g_surfaceParameter, 0.3);
     vec3 lifeDirection = refract(incident, calmNormal, 1.0 / WATER_IOR);
     float distance;

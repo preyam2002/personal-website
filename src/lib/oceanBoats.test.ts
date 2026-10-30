@@ -12,7 +12,13 @@ import { ACTOR_TEXTURE_WIDTH, PELLET_SLOTS, type SchoolBounds } from "./oceanLif
 import { seededRandom } from "./oceanWaves";
 
 const emptyBounds = (): SchoolBounds => ({
-  count: 0, low: [1, 1, 1], high: [-1, -1, -1], airLow: [1, 1, 1], airHigh: [-1, -1, -1],
+  count: 0,
+  low: [1, 1, 1],
+  high: [-1, -1, -1],
+  airLow: [1, 1, 1],
+  airHigh: [-1, -1, -1],
+  boatLow: [1, 1, 1],
+  boatHigh: [-1, -1, -1],
 });
 
 describe("paper boats", () => {
@@ -84,7 +90,8 @@ describe("paper boats", () => {
     const code = data[texel + 7];
     expect(Math.floor(code / 10)).toBe(0);
     expect(code % 10).toBeLessThan(Math.PI * 2);
-    expect(bounds.low[0]).toBeLessThan(boats[0].position[0]);
-    expect(bounds.airHigh[2]).toBeGreaterThan(boats[0].position[2]);
+    expect(bounds.boatLow[0]).toBeLessThan(boats[0].position[0]);
+    expect(bounds.boatHigh[2]).toBeGreaterThan(boats[0].position[2]);
+    expect(bounds.low[0]).toBeGreaterThan(bounds.high[0]);
   });
 });
