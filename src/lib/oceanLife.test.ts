@@ -13,6 +13,7 @@ import {
   dropPellets,
   fishMouth,
   getSchoolHome,
+  packPellets,
   packSchool,
   startFishJump,
   stepPellets,
@@ -233,5 +234,26 @@ describe("school home", () => {
       expect(offset[0] * camera.forward[0] + offset[1] * camera.forward[1] + offset[2] * camera.forward[2])
         .toBeGreaterThan(3);
     }
+  });
+});
+
+describe("pellet packing", () => {
+  it("writes pellets into row 3 and grows the water and air bounds", () => {
+    const school = [fish([0, -1, 5], [0.4, 0, 0])];
+    const data = new Float32Array(ACTOR_TEXTURE_WIDTH * 16);
+    const bounds = packSchool(school, data, flat);
+    const pellets: Pellet[] = [];
+    dropPellets(pellets, 3, 8, 2, 4, flat, seededRandom(9), 0);
+    pellets[1].floating = false;
+    pellets[1].position = [3, -2, 8];
+    expect(packPellets(pellets, data, bounds)).toBe(2);
+    const row = ACTOR_TEXTURE_WIDTH * 3 * 4;
+    expect(data[row + 3]).toBeLessThan(0);
+    expect(data[row + 7]).toBeGreaterThan(0);
+    expect(bounds.low[1]).toBeLessThanOrEqual(-2);
+    expect(bounds.high[2]).toBeGreaterThanOrEqual(pellets[0].position[2]);
+    expect(bounds.airLow[0]).toBeLessThanOrEqual(pellets[0].position[0]);
+    expect(bounds.airHigh[0]).toBeGreaterThanOrEqual(pellets[0].position[0]);
+    expect(bounds.airLow[1]).toBeGreaterThan(-1);
   });
 });

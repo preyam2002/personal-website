@@ -1,4 +1,4 @@
-import { ACTOR_TEXTURE_WIDTH, FISH_BOUND_RADIUS } from "./oceanLife";
+import { ACTOR_TEXTURE_WIDTH, FISH_BOUND_RADIUS, PELLET_SLOTS } from "./oceanLife";
 
 /**
  * Ray-marched fish for the display shader.
@@ -11,6 +11,7 @@ import { ACTOR_TEXTURE_WIDTH, FISH_BOUND_RADIUS } from "./oceanLife";
 export const lifeShader = `
 uniform highp sampler2D u_actors;
 uniform highp int u_fishCount;
+uniform highp int u_pelletCount;
 uniform vec3 u_lifeLow;
 uniform vec3 u_lifeHigh;
 uniform vec3 u_airLow;
@@ -169,12 +170,43 @@ vec3 fishRadianceInAir(vec3 normal, vec3 direction, vec3 albedo, float silver) {
   return mix(diffuse, environment, clamp(0.12 + 0.6 * pow(facing, 4.0) + silver * 0.3, 0.0, 1.0));
 }
 
-bool shadeFish(vec3 origin, vec3 direction, float limit, bool inWater,
+/** Test the pellet spheres. A negative radius marks a pellet that floats at the surface. */
+bool tracePellets(vec3 origin, vec3 direction, bool airOnly, inout float hitDistance, out vec3 hitNormal) {
+  bool hit = false;
+  hitNormal = vec3(0.0, 1.0, 0.0);
+  for (int index = 0; index < ${PELLET_SLOTS}; index += 1) {
+    if (index >= u_pelletCount) break;
+    vec4 pellet = texelFetch(u_actors, ivec2(index, 3), 0);
+    if (airOnly && pellet.w > 0.0) continue;
+    vec3 relative = origin - pellet.xyz;
+    float halfChord = dot(relative, direction);
+    float discriminant = halfChord * halfChord - dot(relative, relative) + pellet.w * pellet.w;
+    if (discriminant < 0.0) continue;
+    float travel = -halfChord - sqrt(discriminant);
+    if (travel > 0.0 && travel < hitDistance) {
+      hitDistance = travel;
+      hitNormal = normalize(relative + direction * travel);
+      hit = true;
+    }
+  }
+  return hit;
+}
+
+bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
   out float hitDistance, out vec3 radiance) {
   vec3 local;
   int index;
   radiance = vec3(0.0);
-  if (!traceFish(origin, direction, limit, !inWater, hitDistance, local, index)) return false;
+  bool fish = traceFish(origin, direction, limit, !inWater, hitDistance, local, index);
+  vec3 pelletNormal;
+  if (u_pelletCount > 0 && tracePellets(origin, direction, !inWater, hitDistance, pelletNormal)) {
+    vec3 food = vec3(0.32, 0.19, 0.08);
+    radiance = inWater
+      ? fishRadianceInWater(origin + direction * hitDistance, pelletNormal, direction, food, 0.0)
+      : fishRadianceInAir(pelletNormal, direction, food, 0.0);
+    return true;
+  }
+  if (!fish) return false;
   vec3 position, right, up, forward;
   float size, phase;
   vec4 style;
@@ -190,7 +222,7 @@ bool shadeFish(vec3 origin, vec3 direction, float limit, bool inWater,
 }
 
 /**
- * Sample the water below a surface point, with fish.
+ * Sample the water below a surface point, with fish and pellets.
  *
  * The fish ray uses a surface normal filtered over 0.3 m. Capillary ripples
  * would otherwise break each fish into speckles at grazing view angles. The
@@ -205,7 +237,7 @@ vec3 sampleRefractedScene(vec3 surfacePosition, vec3 incident, vec3 direction, i
     float distance;
     vec3 radiance;
     if (dot(lifeDirection, lifeDirection) > 0.000001
-      && shadeFish(origin, lifeDirection, 52.0, true, distance, radiance)) {
+      && shadeLife(origin, lifeDirection, 52.0, true, distance, radiance)) {
       return radiance * exp(-waterExtinctionCoefficient() * distance)
         + underwaterVolume(origin, direction, distance, sampleCount);
     }

@@ -401,6 +401,7 @@ export function stepPellets(
 }
 
 export const ACTOR_TEXTURE_WIDTH = 64;
+export const PELLET_SLOTS = 12;
 export const ACTOR_TEXTURE_ROWS = 4;
 export const FISH_BOUND_RADIUS = 0.72;
 
@@ -482,4 +483,31 @@ export function getSchoolHome(time: number, camera: OceanCamera, scroll: number,
   const t = Math.min(Math.max((scroll - 0.1) / 0.2, 0), 1);
   const blend = t * t * (3 - 2 * t);
   return [0, 1, 2].map(axis => surfaceHome[axis] + (deepHome[axis] - surfaceHome[axis]) * blend) as Vector3;
+}
+
+/**
+ * Write the pellets into row 3 of the actor texture and grow the bounds.
+ *
+ * Each texel holds (position, radius). A floating pellet stores a negative
+ * radius and also grows the air bounds, because part of it sits above water.
+ */
+export function packPellets(pellets: readonly Pellet[], data: Float32Array, bounds: SchoolBounds) {
+  const count = Math.min(pellets.length, PELLET_SLOTS);
+  const grow = (low: Vector3, high: Vector3, position: Vector3) => {
+    if (low[0] > high[0]) {
+      low.fill(Infinity);
+      high.fill(-Infinity);
+    }
+    for (let axis = 0; axis < 3; axis += 1) {
+      low[axis] = Math.min(low[axis], position[axis] - PELLET_RADIUS);
+      high[axis] = Math.max(high[axis], position[axis] + PELLET_RADIUS);
+    }
+  };
+  for (let index = 0; index < count; index += 1) {
+    const { position, floating } = pellets[index];
+    data.set([...position, floating ? -PELLET_RADIUS : PELLET_RADIUS], (ACTOR_TEXTURE_WIDTH * 3 + index) * 4);
+    grow(bounds.low, bounds.high, position);
+    if (floating) grow(bounds.airLow, bounds.airHigh, position);
+  }
+  return count;
 }

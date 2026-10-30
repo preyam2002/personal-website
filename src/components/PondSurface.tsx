@@ -31,16 +31,32 @@ import { RIPPLE_SLOTS, createRipplePool, rippleShader } from "@/lib/oceanRipples
 import {
   ACTOR_TEXTURE_ROWS,
   ACTOR_TEXTURE_WIDTH,
+  PELLET_RADIUS,
+  PELLET_SLOTS,
   createSchool,
+  dropPellets,
   getSchoolHome,
+  packPellets,
   packSchool,
+  stepPellets,
   stepSchool,
   type Fish,
+  type LifeEvent,
+  type Pellet,
   type SchoolBounds,
   type SchoolEnvironment,
   type SchoolStimulus,
 } from "@/lib/oceanLife";
 import { lifeShader } from "@/lib/oceanLifeShaders";
+import {
+  PROBE_ROWS,
+  PROBE_SLOTS,
+  packProbes,
+  sampleSwellSurface,
+  unpackProbes,
+  type ProbeRequest,
+  type ProbeSample,
+} from "@/lib/oceanProbes";
 import {
   OCEAN_CASCADE_COUNT,
   OCEAN_CASCADE_LENGTHS,
@@ -114,6 +130,7 @@ type QualityProfile = {
   fishCount: number;
   frameInterval: number;
   meshColumns: number;
+  pelletCount: number;
   meshRows: number;
   name: Exclude<WaterQuality, "static">;
   pixelBudget: number;
@@ -143,6 +160,7 @@ const FULL_QUALITY: QualityProfile = {
   frameInterval: 1_000 / 60,
   meshColumns: 384,
   meshRows: 640,
+  pelletCount: PELLET_SLOTS,
   name: "full",
   pixelBudget: 1_000_000,
   rippleSlots: RIPPLE_SLOTS,
@@ -162,6 +180,7 @@ const REDUCED_QUALITY: QualityProfile = {
   frameInterval: 1_000 / 30,
   meshColumns: 192,
   meshRows: 384,
+  pelletCount: 6,
   name: "reduced",
   pixelBudget: 300_000,
   rippleSlots: 6,
@@ -181,6 +200,7 @@ const LOW_QUALITY: QualityProfile = {
   frameInterval: 1_000 / 30,
   meshColumns: 96,
   meshRows: 192,
+  pelletCount: 0,
   name: "low",
   pixelBudget: 180_000,
   rippleSlots: 3,
@@ -640,6 +660,41 @@ void main() {
   float crest = smoothstep(0.04, 0.28, oceanDisplacement(point, footprint).y);
   float density = advanceFoam(previous, compression * crest, u_seconds);
   outColor = vec4(density, 0.0, 0.0, 1.0);
+}
+`;
+
+/**
+ * Sample the wave field at a few points for floating objects.
+ *
+ * Each column is one probe. A floating probe displaces its rest point like
+ * the surface mesh. A fixed probe inverts the horizontal displacement to find
+ * the height above one world point. Row 0 stores the position, row 1 the normal.
+ */
+const probeFragmentShader = `#version 300 es
+precision highp float;
+uniform float u_gridSize;
+uniform float u_oceanTime;
+uniform float u_choppiness;
+uniform vec4 u_waveData[${OCEAN_WAVE_COMPONENT_COUNT}];
+uniform float u_wavePhase[${OCEAN_WAVE_COMPONENT_COUNT}];
+uniform vec4 u_probes[${PROBE_SLOTS}];
+out vec4 outColor;
+${glslWaves}
+void main() {
+  ivec2 pixel = ivec2(gl_FragCoord.xy);
+  vec4 probe = u_probes[pixel.x];
+  vec2 parameter = probe.xy;
+  if (probe.z > 0.5) {
+    for (int iteration = 0; iteration < 3; iteration += 1) {
+      parameter = probe.xy - oceanDisplacement(parameter, probe.w).xz;
+    }
+  }
+  if (pixel.y == 0) {
+    vec3 displacement = oceanDisplacement(parameter, probe.w);
+    outColor = vec4(parameter.x + displacement.x, displacement.y, parameter.y + displacement.z, 1.0);
+  } else {
+    outColor = vec4(surfaceNormal(parameter, probe.w), 1.0);
+  }
 }
 `;
 
@@ -1850,7 +1905,7 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
   bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
   float lifeDistance;
   vec3 lifeRadiance;
-  if (shadeFish(origin, ray, surfaceHit ? distanceToSurface : 200.0, false, lifeDistance, lifeRadiance)) {
+  if (shadeLife(origin, ray, surfaceHit ? distanceToSurface : 200.0, false, lifeDistance, lifeRadiance)) {
     return lifeRadiance;
   }
   if (!surfaceHit) return atmosphere(ray, 1.0, 1.0, 0.0);
@@ -1947,7 +2002,7 @@ vec3 renderBelowWaterSurface(vec3 origin, vec3 ray) {
   bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
   float lifeDistance;
   vec3 lifeRadiance;
-  if (shadeFish(origin, ray, surfaceHit ? distanceToSurface : 52.0, true, lifeDistance, lifeRadiance)) {
+  if (shadeLife(origin, ray, surfaceHit ? distanceToSurface : 52.0, true, lifeDistance, lifeRadiance)) {
     return lifeRadiance * exp(-extinction * lifeDistance)
       + underwaterVolume(origin, ray, lifeDistance, g_crossing ? 2 : 3);
   }
@@ -2185,6 +2240,9 @@ export type RippleFrame = {
 export type LifeFrame = {
   actors: Float32Array;
   school: SchoolBounds;
+  pelletCount: number;
+  probes: Float32Array;
+  probeCount: number;
 };
 
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
@@ -2381,6 +2439,9 @@ const FRAME_INTERVAL_TOLERANCE = 2.5;
 const INTERACTION_SCROLL_LIMIT = 0.16;
 const INTERACTION_DISTANCE = 40;
 const TAP_RIPPLE_AMPLITUDE = 0.14;
+const PELLET_RIPPLE_AMPLITUDE = 0.04;
+const BITE_RIPPLE_AMPLITUDE = 0.05;
+const FEEDING_DISTANCE = 16;
 const MAX_LIFE_STEP_SECONDS = 0.1;
 const POINTER_MEMORY_SECONDS = 6;
 const LIFE_SUBSTEP_SECONDS = 1 / 30;
@@ -2468,6 +2529,7 @@ async function createPondEngine(
       unpackProgram: [fullscreenVertexShader, unpackSpectrumShader],
       filterProgram: [fullscreenVertexShader, filterSpectrumShader],
       foamProgram: [fullscreenVertexShader, foamFragmentShader],
+      probeProgram: [fullscreenVertexShader, probeFragmentShader],
       causticProgram: [causticVertexShader, causticFragmentShader],
       causticBlurProgram: [fullscreenVertexShader, causticBlurFragmentShader],
       atmosphereProgram: [fullscreenVertexShader, atmosphereFragmentShader],
@@ -2488,7 +2550,7 @@ async function createPondEngine(
   }
   const { cascades, mesh, noise } = prepared.value;
   const {
-    evolveProgram, transformProgram, unpackProgram, filterProgram, foamProgram,
+    evolveProgram, transformProgram, unpackProgram, filterProgram, foamProgram, probeProgram,
     causticProgram, causticBlurProgram, atmosphereProgram, cloudProgram,
     displayProgram, surfaceProgram,
   } = compiled.value;
@@ -2502,6 +2564,13 @@ async function createPondEngine(
   gl.generateMipmap(gl.TEXTURE_2D);
   const actorTexture = createTexture(gl, ACTOR_TEXTURE_WIDTH, ACTOR_TEXTURE_ROWS,
     gl.RGBA32F, gl.RGBA, gl.FLOAT, null, gl.NEAREST);
+  const probeTarget = createRenderTarget(gl, PROBE_SLOTS, PROBE_ROWS, gl.RGBA32F, gl.FLOAT, null, gl.NEAREST);
+  const probeBuffer = gl.createBuffer();
+  if (!probeBuffer) throw new Error("WebGL probe buffer allocation failed");
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, probeBuffer);
+  gl.bufferData(gl.PIXEL_PACK_BUFFER, PROBE_SLOTS * PROBE_ROWS * 16, gl.STREAM_READ);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  let probePending = false;
   const initialSpectrum = createTexture(gl, quality.simulationSize * OCEAN_CASCADE_COUNT,
     quality.simulationSize, gl.RGBA32F, gl.RGBA, gl.FLOAT, cascades.initial, gl.NEAREST);
   const spectrumTargets = [
@@ -2694,6 +2763,17 @@ async function createPondEngine(
     waveData: getUniform(gl, foamProgram, "u_waveData[0]"),
     wavePhase: getUniform(gl, foamProgram, "u_wavePhase[0]"),
   };
+  const probeUniforms = {
+    displacement: getUniform(gl, probeProgram, "u_displacement"),
+    gradient: getUniform(gl, probeProgram, "u_gradient"),
+    distantNoise: getUniform(gl, probeProgram, "u_distantNoise"),
+    gridSize: getUniform(gl, probeProgram, "u_gridSize"),
+    oceanTime: getUniform(gl, probeProgram, "u_oceanTime"),
+    choppiness: getUniform(gl, probeProgram, "u_choppiness"),
+    waveData: getUniform(gl, probeProgram, "u_waveData[0]"),
+    wavePhase: getUniform(gl, probeProgram, "u_wavePhase[0]"),
+    probes: getUniform(gl, probeProgram, "u_probes[0]"),
+  };
   const surfaceUniforms = {
     displacement: getUniform(gl, surfaceProgram, "u_displacement"),
     distantNoise: getUniform(gl, surfaceProgram, "u_distantNoise"),
@@ -2785,6 +2865,7 @@ async function createPondEngine(
     absorption: getUniform(gl, displayProgram, "u_absorption"),
     actors: getUniform(gl, displayProgram, "u_actors"),
     fishCount: getUniform(gl, displayProgram, "u_fishCount"),
+    pelletCount: getUniform(gl, displayProgram, "u_pelletCount"),
     lifeLow: getUniform(gl, displayProgram, "u_lifeLow"),
     lifeHigh: getUniform(gl, displayProgram, "u_lifeHigh"),
     airLow: getUniform(gl, displayProgram, "u_airLow"),
@@ -2794,6 +2875,7 @@ async function createPondEngine(
   const rippleUniforms = {
     foam: getRippleUniforms(gl, foamProgram),
     surface: getRippleUniforms(gl, surfaceProgram),
+    probe: getRippleUniforms(gl, probeProgram),
     caustic: getRippleUniforms(gl, causticProgram),
     display: getRippleUniforms(gl, displayProgram),
   };
@@ -2830,6 +2912,15 @@ async function createPondEngine(
   gl.uniform2f(foamUniforms.drift, foamDrift[0], foamDrift[1]);
   gl.uniform4fv(foamUniforms.waveData, waveField.data);
   gl.uniform1fv(foamUniforms.wavePhase, waveField.phases);
+
+  gl.useProgram(probeProgram);
+  gl.uniform1i(probeUniforms.displacement, 0);
+  gl.uniform1i(probeUniforms.gradient, 3);
+  gl.uniform1i(probeUniforms.distantNoise, 8);
+  gl.uniform1f(probeUniforms.gridSize, quality.simulationSize);
+  gl.uniform1f(probeUniforms.choppiness, waveField.choppiness);
+  gl.uniform4fv(probeUniforms.waveData, waveField.data);
+  gl.uniform1fv(probeUniforms.wavePhase, waveField.phases);
 
   gl.useProgram(surfaceProgram);
   gl.uniform1i(surfaceUniforms.displacement, 0);
@@ -2949,6 +3040,35 @@ async function createPondEngine(
     foamIndex = next;
     foamTime = oceanTime;
   };
+  const renderProbes = (oceanTime: number, life: LifeFrame) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, probeTarget.framebuffer);
+    gl.viewport(0, 0, PROBE_SLOTS, PROBE_ROWS);
+    gl.disable(gl.BLEND);
+    gl.useProgram(probeProgram);
+    gl.bindVertexArray(fullscreen.vertexArray);
+    bindArrayTexture(gl, displacementTexture, 0);
+    bindArrayTexture(gl, gradientTexture, 3);
+    gl.uniform1f(probeUniforms.oceanTime, oceanTime);
+    gl.uniform4fv(probeUniforms.probes, life.probes);
+    applyRipples(rippleUniforms.probe);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // The frame fence covers this copy, so the next frame reads it without a stall.
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, probeBuffer);
+    gl.readPixels(0, 0, PROBE_SLOTS, PROBE_ROWS, gl.RGBA, gl.FLOAT, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    probePending = true;
+  };
+  /** Copy the probe results of the last finished frame. Return false if none wait. */
+  const readProbes = (output: Float32Array) => {
+    if (!probePending) return false;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, probeBuffer);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, output);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    probePending = false;
+    return true;
+  };
+
   const renderSpectrum = (oceanTime: number) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, spectrumTargets[0].framebuffer);
     gl.viewport(0, 0, quality.simulationSize * OCEAN_CASCADE_COUNT, quality.simulationSize);
@@ -3141,6 +3261,7 @@ async function createPondEngine(
       renderFoam(oceanTime);
       spectrumTime = oceanTime;
     }
+    if (life.probeCount > 0) renderProbes(oceanTime, life);
     let skyChanged = false;
     if (light !== atmosphereLight) {
       const signature = light.sunDirection.map(value => value.toFixed(4)).join(":");
@@ -3248,12 +3369,13 @@ async function createPondEngine(
     gl.uniform1f(displayUniforms.oceanTime, oceanTime);
     applyRipples(rippleUniforms.display);
     const { school } = life;
-    if (school.count > 0) {
+    if (school.count > 0 || life.pelletCount > 0) {
       bindTexture(gl, actorTexture, 9);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ACTOR_TEXTURE_WIDTH, ACTOR_TEXTURE_ROWS,
         gl.RGBA, gl.FLOAT, life.actors);
     }
     gl.uniform1i(displayUniforms.fishCount, school.count);
+    gl.uniform1i(displayUniforms.pelletCount, life.pelletCount);
     gl.uniform3f(displayUniforms.lifeLow, school.low[0], school.low[1], school.low[2]);
     gl.uniform3f(displayUniforms.lifeHigh, school.high[0], school.high[1], school.high[2]);
     gl.uniform3f(displayUniforms.airLow, school.airLow[0], school.airLow[1], school.airLow[2]);
@@ -3316,6 +3438,10 @@ async function createPondEngine(
     gl.deleteTexture(initialSpectrum);
     gl.deleteTexture(distantNoiseTexture);
     gl.deleteTexture(actorTexture);
+    gl.deleteFramebuffer(probeTarget.framebuffer);
+    gl.deleteTexture(probeTarget.texture);
+    gl.deleteBuffer(probeBuffer);
+    gl.deleteProgram(probeProgram);
     gl.deleteTexture(displacementTexture);
     gl.deleteTexture(gradientTexture);
     gl.deleteTexture(varianceTexture);
@@ -3353,7 +3479,7 @@ async function createPondEngine(
     gl.deleteProgram(displayProgram);
   };
 
-  return { destroy, render };
+  return { destroy, readProbes, render };
 }
 
 function getSceneLight(
@@ -3484,6 +3610,16 @@ export default function PondSurface({
     };
     const threats: { point: Vector3; until: number }[] = [];
     const stimuli: SchoolStimulus[] = [];
+    const pellets: Pellet[] = [];
+    let nextPelletId = 0;
+    let pressedAt = -Infinity;
+    // Probe results come back one frame later. The keys connect them to their objects.
+    const probeSamples = new Map<string, ProbeSample>();
+    const probeReadback = new Float32Array(PROBE_SLOTS * PROBE_ROWS * 4);
+    let submittedProbeKeys: string[] = [];
+    let frameProbeKeys: string[] = [];
+    const floatingSurface = (key: string, x: number, z: number) =>
+      probeSamples.get(key) ?? sampleSwellSurface(waveField, x, z, oceanTime);
     const updateStimuli = (timestamp: number) => {
       stimuli.length = 0;
       const recent = pointer.point && lifeTime - pointer.lifeTime < POINTER_MEMORY_SECONDS;
@@ -3512,18 +3648,45 @@ export default function PondSurface({
       floor: -OCEAN_DEPTH_METERS,
       surfaceAt,
       stimuli,
-      pellets: [],
+      pellets,
     });
     const school: Fish[] = createSchool(quality.fishCount, schoolEnvironment(0).home, lifeRandom);
     // Settle the school before the first frame, so a still frame shows a formed school.
     for (let step = 0; step < 90; step += 1) stepSchool(school, schoolEnvironment(0), 1 / 30);
     const actors = new Float32Array(ACTOR_TEXTURE_WIDTH * ACTOR_TEXTURE_ROWS * 4);
-    const lifeFrame: LifeFrame = { actors, school: packSchool(school, actors, surfaceAt) };
+    const lifeFrame: LifeFrame = {
+      actors,
+      school: packSchool(school, actors, surfaceAt),
+      pelletCount: 0,
+      probes: new Float32Array(PROBE_SLOTS * 4),
+      probeCount: 0,
+    };
+    const lifeEvents: LifeEvent[] = [];
     const advanceLife = (seconds: number) => {
       const steps = Math.ceil(seconds / LIFE_SUBSTEP_SECONDS);
+      lifeEvents.length = 0;
       for (let step = 0; step < steps; step += 1) {
-        stepSchool(school, schoolEnvironment(renderedScrollProgress), seconds / steps);
+        stepSchool(school, schoolEnvironment(renderedScrollProgress), seconds / steps, lifeEvents);
       }
+      stepPellets(pellets, seconds, surfaceAt);
+      for (const event of lifeEvents) {
+        if (event.type === "bite" && event.floating) {
+          ripples.add(event.position[0], event.position[2], BITE_RIPPLE_AMPLITUDE, lifeTime);
+        }
+      }
+    };
+    // Place the floating objects on the sampled wave field and request the next samples.
+    const updateFloating = () => {
+      const requests: ProbeRequest[] = [];
+      for (const pellet of pellets) {
+        if (!pellet.floating) continue;
+        const key = `pellet:${pellet.id}`;
+        const sample = floatingSurface(key, pellet.anchor[0], pellet.anchor[1]);
+        pellet.position = [sample.position[0], sample.position[1] - PELLET_RADIUS * 0.35, sample.position[2]];
+        requests.push({ key, x: pellet.anchor[0], z: pellet.anchor[1], mode: "floating", footprint: 0.05 });
+      }
+      frameProbeKeys = packProbes(requests, lifeFrame.probes);
+      lifeFrame.probeCount = frameProbeKeys.length;
     };
 
     const frameGate = createWebGLFrameGate(gl);
@@ -3657,6 +3820,7 @@ export default function PondSurface({
         requestRender();
         return;
       }
+      if (engine.readProbes(probeReadback)) unpackProbes(submittedProbeKeys, probeReadback, probeSamples);
 
       if (canvas.dataset.webgl !== "active" && startupFrames >= (reducedMotion || previewTime !== null ? 1 : 2)) {
         canvas.dataset.webgl = "active";
@@ -3698,7 +3862,9 @@ export default function PondSurface({
       else gestures.cancel();
       updateStimuli(timestamp);
       rippleFrame.count = ripples.pack(lifeTime, rippleFrame.data);
+      updateFloating();
       lifeFrame.school = packSchool(school, lifeFrame.actors, surfaceAt);
+      lifeFrame.pelletCount = packPellets(pellets, lifeFrame.actors, lifeFrame.school);
 
       const currentCelestial = previewCelestial ?? celestialRef.current;
       if (currentCelestial !== lightState || renderWidth !== lightWidth || renderHeight !== lightHeight) {
@@ -3718,6 +3884,7 @@ export default function PondSurface({
         rippleFrame,
         lifeFrame,
       );
+      submittedProbeKeys = frameProbeKeys;
       frameGate.submit();
       startupFrames += 1;
       const scaleText = appliedScale.toFixed(2);
@@ -3746,6 +3913,15 @@ export default function PondSurface({
 
     const handleGestures = (events: GestureEvent[]) => {
       for (const event of events) {
+        if (event.type === "press") {
+          const point = quality.pelletCount > 0 ? toWaterPoint(event.x, event.y) : null;
+          if (!point || Math.hypot(point[0], point[2] - CAMERA_ORIGIN_TOP[2]) > FEEDING_DISTANCE) continue;
+          nextPelletId = dropPellets(pellets, point[0], point[2], event.repeat === 0 ? 4 : 2,
+            quality.pelletCount, surfaceAt, lifeRandom, nextPelletId);
+          ripples.add(point[0], point[2], PELLET_RIPPLE_AMPLITUDE, lifeTime);
+          pressedAt = performance.now();
+          continue;
+        }
         if (event.type !== "tap") continue;
         const point = toWaterPoint(event.x, event.y);
         if (!point) continue;
@@ -3786,6 +3962,11 @@ export default function PondSurface({
       handleGestures(gestures.up(event.pointerId, event.clientX, event.clientY, event.timeStamp));
     };
     const onPointerCancel = (event: PointerEvent) => gestures.cancel(event.pointerId);
+    // A touch long press that fed the fish must not also open the context menu.
+    const onContextMenu = (event: MouseEvent) => {
+      if (performance.now() - pressedAt < 800 && !(event.target instanceof Element
+        && event.target.closest(INTERACTIVE_SELECTOR))) event.preventDefault();
+    };
 
     canvas.dataset.renderScale = "1";
     const onResize = () => {
@@ -3851,6 +4032,7 @@ export default function PondSurface({
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerup", onPointerUp, { passive: true });
     window.addEventListener("pointercancel", onPointerCancel, { passive: true });
+    window.addEventListener("contextmenu", onContextMenu);
     canvas.addEventListener("webglcontextlost", onContextLost);
     canvas.addEventListener("webglcontextrestored", onContextRestored);
     canvas.dataset.quality = quality.name;
@@ -3883,6 +4065,7 @@ export default function PondSurface({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("contextmenu", onContextMenu);
       canvas.removeEventListener("webglcontextlost", onContextLost);
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
       frameGate.dispose();
