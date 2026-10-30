@@ -424,6 +424,8 @@ bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
   radiance = inWater
     ? fishRadianceInWater(point, normal, direction, albedo, silver)
     : fishRadianceInAir(normal, direction, albedo, silver);
+  // At night the plankton light around a fish also lights the fish.
+  if (inWater) radiance += glowRadiance(sampleGlow(point.xz)) * 0.1;
   return true;
 }
 

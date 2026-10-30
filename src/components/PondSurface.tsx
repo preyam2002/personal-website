@@ -54,6 +54,7 @@ import {
   type SchoolStimulus,
 } from "@/lib/oceanLife";
 import { lifeReflectionShader, lifeShader } from "@/lib/oceanLifeShaders";
+import { glowFragmentShader, glowSampleShader, nightGlowStrength } from "@/lib/oceanGlow";
 import {
   createBoats,
   packBoats,
@@ -146,6 +147,7 @@ type QualityProfile = {
   fishCount: number;
   fishJumps: boolean;
   frameInterval: number;
+  glowSize: number;
   meshColumns: number;
   pelletCount: number;
   meshRows: number;
@@ -163,6 +165,7 @@ const OCEAN_WAVE_HEIGHT_SCALE = 1.0;
 const WATER_DOMAIN_METERS = 32;
 const OCEAN_DEPTH_METERS = 24;
 const CELESTIAL_DISC_SCALE = 1.8;
+const GLOW_SURFACE_RADIANCE = "0.07";
 const DEFAULT_CELESTIAL_DATE = Date.UTC(2026, 5, 21, 6, 30);
 
 const FULL_QUALITY: QualityProfile = {
@@ -178,6 +181,7 @@ const FULL_QUALITY: QualityProfile = {
   fishCount: 36,
   fishJumps: true,
   frameInterval: 1_000 / 60,
+  glowSize: 192,
   meshColumns: 384,
   meshRows: 640,
   pelletCount: PELLET_SLOTS,
@@ -201,6 +205,7 @@ const REDUCED_QUALITY: QualityProfile = {
   fishCount: 18,
   fishJumps: true,
   frameInterval: 1_000 / 30,
+  glowSize: 128,
   meshColumns: 192,
   meshRows: 384,
   pelletCount: 6,
@@ -224,6 +229,7 @@ const LOW_QUALITY: QualityProfile = {
   fishCount: 0,
   fishJumps: false,
   frameInterval: 1_000 / 30,
+  glowSize: 0,
   meshColumns: 96,
   meshRows: 192,
   pelletCount: 0,
@@ -1924,6 +1930,7 @@ vec3 sampleUnderwaterRay(vec3 origin, vec3 direction, int sampleCount) {
     + volumeRadiance * mix(1.0, 0.38, floorVisibility);
 }
 
+${glowSampleShader}
 ${lifeShader}
 ${lifeReflectionShader}
 
@@ -1989,6 +1996,9 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
     displayLightDirection,
     waterHighlightColor
   );
+  // Bioluminescence shines from just below the surface, so the transmitted part reaches the eye.
+  color += glowRadiance(sampleGlow(g_surfaceParameter)) * glowSparkle(g_surfaceParameter)
+    * ${GLOW_SURFACE_RADIANCE} * (1.0 - fresnel);
 
   vec2 foamUv = (g_surfaceParameter - vec2(${FOAM_ORIGIN.map(value => value.toFixed(1)).join(", ")}))
     / ${FOAM_DOMAIN_METERS.toFixed(1)};
@@ -2286,6 +2296,7 @@ export type LifeFrame = {
   probeCount: number;
   splashes: Float32Array;
   splashCount: number;
+  seconds: number;
 };
 
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
@@ -2581,6 +2592,7 @@ async function createPondEngine(
       filterProgram: [fullscreenVertexShader, filterSpectrumShader],
       foamProgram: [fullscreenVertexShader, foamFragmentShader],
       probeProgram: [fullscreenVertexShader, probeFragmentShader],
+      glowProgram: [fullscreenVertexShader, glowFragmentShader],
       causticProgram: [causticVertexShader, causticFragmentShader],
       causticBlurProgram: [fullscreenVertexShader, causticBlurFragmentShader],
       atmosphereProgram: [fullscreenVertexShader, atmosphereFragmentShader],
@@ -2601,7 +2613,7 @@ async function createPondEngine(
   }
   const { cascades, mesh, noise } = prepared.value;
   const {
-    evolveProgram, transformProgram, unpackProgram, filterProgram, foamProgram, probeProgram,
+    evolveProgram, transformProgram, unpackProgram, filterProgram, foamProgram, probeProgram, glowProgram,
     causticProgram, causticBlurProgram, atmosphereProgram, cloudProgram,
     displayProgram, surfaceProgram,
   } = compiled.value;
@@ -2622,6 +2634,15 @@ async function createPondEngine(
   gl.bufferData(gl.PIXEL_PACK_BUFFER, PROBE_SLOTS * PROBE_ROWS * 16, gl.STREAM_READ);
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   let probePending = false;
+  const glowTargets = quality.glowSize > 0 ? Array.from({ length: 2 }, () => {
+    const target = createRenderTarget(gl, quality.glowSize, quality.glowSize, gl.RGBA16F, gl.HALF_FLOAT, null, gl.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, target.texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return target;
+  }) : [];
+  let glowIndex = 0;
+  let glowActive = false;
   const initialSpectrum = createTexture(gl, quality.simulationSize * OCEAN_CASCADE_COUNT,
     quality.simulationSize, gl.RGBA32F, gl.RGBA, gl.FLOAT, cascades.initial, gl.NEAREST);
   const spectrumTargets = [
@@ -2825,6 +2846,14 @@ async function createPondEngine(
     wavePhase: getUniform(gl, probeProgram, "u_wavePhase[0]"),
     probes: getUniform(gl, probeProgram, "u_probes[0]"),
   };
+  const glowUniforms = {
+    previous: getUniform(gl, glowProgram, "u_previous"),
+    actors: getUniform(gl, glowProgram, "u_actors"),
+    fishCount: getUniform(gl, glowProgram, "u_fishCount"),
+    seconds: getUniform(gl, glowProgram, "u_seconds"),
+    splashes: getUniform(gl, glowProgram, "u_splashes[0]"),
+    splashCount: getUniform(gl, glowProgram, "u_splashCount"),
+  };
   const surfaceUniforms = {
     displacement: getUniform(gl, surfaceProgram, "u_displacement"),
     distantNoise: getUniform(gl, surfaceProgram, "u_distantNoise"),
@@ -2922,6 +2951,8 @@ async function createPondEngine(
     splashes: getUniform(gl, displayProgram, "u_splashes[0]"),
     splashCount: getUniform(gl, displayProgram, "u_splashCount"),
     sprayDroplets: getUniform(gl, displayProgram, "u_sprayDroplets"),
+    glow: getUniform(gl, displayProgram, "u_glow"),
+    glowStrength: getUniform(gl, displayProgram, "u_glowStrength"),
     lifeLow: getUniform(gl, displayProgram, "u_lifeLow"),
     lifeHigh: getUniform(gl, displayProgram, "u_lifeHigh"),
     airLow: getUniform(gl, displayProgram, "u_airLow"),
@@ -2934,6 +2965,7 @@ async function createPondEngine(
     foam: getRippleUniforms(gl, foamProgram),
     surface: getRippleUniforms(gl, surfaceProgram),
     probe: getRippleUniforms(gl, probeProgram),
+    glow: getRippleUniforms(gl, glowProgram),
     caustic: getRippleUniforms(gl, causticProgram),
     display: getRippleUniforms(gl, displayProgram),
   };
@@ -3047,6 +3079,10 @@ async function createPondEngine(
   gl.uniform1i(displayUniforms.actors, 9);
   gl.uniform1i(displayUniforms.probeSurface, 10);
   gl.uniform1i(displayUniforms.sprayDroplets, quality.sprayDroplets);
+  gl.uniform1i(displayUniforms.glow, 11);
+  gl.useProgram(glowProgram);
+  gl.uniform1i(glowUniforms.previous, 1);
+  gl.uniform1i(glowUniforms.actors, 9);
   gl.uniform1f(displayUniforms.gridSize, quality.simulationSize);
   gl.uniform1f(displayUniforms.domainSize, WATER_DOMAIN_METERS);
   gl.uniform1f(displayUniforms.floorDepth, OCEAN_DEPTH_METERS);
@@ -3119,6 +3155,36 @@ async function createPondEngine(
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     probePending = true;
   };
+  /** Advance the bioluminescence map. Clear it when the night begins, so no old light returns. */
+  const renderGlow = (life: LifeFrame) => {
+    if (!glowActive) {
+      for (const target of glowTargets) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      glowActive = true;
+    }
+    if (life.seconds > 0) {
+      const next = 1 - glowIndex;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, glowTargets[next].framebuffer);
+      gl.viewport(0, 0, quality.glowSize, quality.glowSize);
+      gl.disable(gl.BLEND);
+      gl.useProgram(glowProgram);
+      gl.bindVertexArray(fullscreen.vertexArray);
+      bindTexture(gl, glowTargets[glowIndex].texture, 1);
+      bindTexture(gl, actorTexture, 9);
+      gl.uniform1i(glowUniforms.fishCount, life.school.count);
+      gl.uniform1f(glowUniforms.seconds, life.seconds);
+      gl.uniform1i(glowUniforms.splashCount, life.splashCount);
+      if (life.splashCount > 0) gl.uniform4fv(glowUniforms.splashes, life.splashes);
+      applyRipples(rippleUniforms.glow);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      glowIndex = next;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  };
+
   /** Copy the probe results of the last finished frame. Return false if none wait. */
   const readProbes = (output: Float32Array) => {
     if (!probePending) return false;
@@ -3322,6 +3388,15 @@ async function createPondEngine(
       spectrumTime = oceanTime;
     }
     if (life.probeCount > 0) renderProbes(oceanTime, life);
+    const { school } = life;
+    if (school.count > 0 || life.pelletCount > 0 || life.boatCount > 0) {
+      bindTexture(gl, actorTexture, 9);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ACTOR_TEXTURE_WIDTH, ACTOR_TEXTURE_ROWS,
+        gl.RGBA, gl.FLOAT, life.actors);
+    }
+    const glowStrength = glowTargets.length > 0 ? nightGlowStrength(light.sunDirection[1]) : 0;
+    if (glowStrength > 0) renderGlow(life);
+    else glowActive = false;
     let skyChanged = false;
     if (light !== atmosphereLight) {
       const signature = light.sunDirection.map(value => value.toFixed(4)).join(":");
@@ -3428,13 +3503,10 @@ async function createPondEngine(
     }
     gl.uniform1f(displayUniforms.oceanTime, oceanTime);
     applyRipples(rippleUniforms.display);
-    const { school } = life;
     if (life.probeCount > 0) bindTexture(gl, probeTarget.texture, 10);
-    if (school.count > 0 || life.pelletCount > 0 || life.boatCount > 0) {
-      bindTexture(gl, actorTexture, 9);
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ACTOR_TEXTURE_WIDTH, ACTOR_TEXTURE_ROWS,
-        gl.RGBA, gl.FLOAT, life.actors);
-    }
+    bindTexture(gl, actorTexture, 9);
+    if (glowStrength > 0) bindTexture(gl, glowTargets[glowIndex].texture, 11);
+    gl.uniform1f(displayUniforms.glowStrength, glowStrength);
     gl.uniform1i(displayUniforms.fishCount, school.count);
     gl.uniform1i(displayUniforms.pelletCount, life.pelletCount);
     gl.uniform1i(displayUniforms.boatCount, life.boatCount);
@@ -3508,6 +3580,11 @@ async function createPondEngine(
     gl.deleteTexture(probeTarget.texture);
     gl.deleteBuffer(probeBuffer);
     gl.deleteProgram(probeProgram);
+    gl.deleteProgram(glowProgram);
+    for (const target of glowTargets) {
+      gl.deleteFramebuffer(target.framebuffer);
+      gl.deleteTexture(target.texture);
+    }
     gl.deleteTexture(displacementTexture);
     gl.deleteTexture(gradientTexture);
     gl.deleteTexture(varianceTexture);
@@ -3760,6 +3837,7 @@ export default function PondSurface({
       probeCount: 0,
       splashes: new Float32Array(SPLASH_SLOTS * 8),
       splashCount: 0,
+      seconds: 0,
     };
     const lifeEvents: LifeEvent[] = [];
     const advanceLife = (seconds: number) => {
@@ -3991,9 +4069,11 @@ export default function PondSurface({
         if (!warmingUp) {
           const lifeSeconds = Math.min(frameSeconds, lifeStepLimit);
           lifeTime += lifeSeconds;
+          lifeFrame.seconds = lifeSeconds;
           advanceLife(lifeSeconds);
         }
       }
+      if (reducedMotion || previewTime !== null) lifeFrame.seconds = 0;
       if (isInteractive()) handleGestures(gestures.poll(timestamp));
       else gestures.cancel();
       updateStimuli(timestamp);
