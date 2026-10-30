@@ -23,6 +23,18 @@ import {
 import { createGestureTracker, type GestureEvent } from "@/lib/oceanGestures";
 import { RIPPLE_SLOTS, createRipplePool, rippleShader } from "@/lib/oceanRipples";
 import {
+  ACTOR_TEXTURE_ROWS,
+  ACTOR_TEXTURE_WIDTH,
+  createSchool,
+  getSchoolHome,
+  packSchool,
+  stepSchool,
+  type Fish,
+  type SchoolBounds,
+  type SchoolEnvironment,
+} from "@/lib/oceanLife";
+import { lifeShader } from "@/lib/oceanLifeShaders";
+import {
   OCEAN_CASCADE_COUNT,
   OCEAN_CASCADE_LENGTHS,
   OCEAN_REPEAT_SECONDS,
@@ -58,6 +70,7 @@ import {
   getSceneSunDirection,
   getSessionOceanSeed,
   getStarFieldTransform,
+  seededRandom,
   getSunAzimuthScale,
   spectralHeightAt,
   type Direction3,
@@ -91,6 +104,7 @@ type QualityProfile = {
   cloudHeight: number;
   cloudWidth: number;
   detailLevel: number;
+  fishCount: number;
   frameInterval: number;
   meshColumns: number;
   meshRows: number;
@@ -118,6 +132,7 @@ const FULL_QUALITY: QualityProfile = {
   cloudHeight: 384,
   cloudWidth: 1024,
   detailLevel: 1,
+  fishCount: 36,
   frameInterval: 1_000 / 60,
   meshColumns: 384,
   meshRows: 640,
@@ -136,6 +151,7 @@ const REDUCED_QUALITY: QualityProfile = {
   cloudHeight: 192,
   cloudWidth: 512,
   detailLevel: 0,
+  fishCount: 18,
   frameInterval: 1_000 / 30,
   meshColumns: 192,
   meshRows: 384,
@@ -154,6 +170,7 @@ const LOW_QUALITY: QualityProfile = {
   cloudHeight: 128,
   cloudWidth: 384,
   detailLevel: 0,
+  fishCount: 0,
   frameInterval: 1_000 / 30,
   meshColumns: 96,
   meshRows: 192,
@@ -1818,12 +1835,18 @@ vec3 sampleUnderwaterRay(vec3 origin, vec3 direction, int sampleCount) {
     + volumeRadiance * mix(1.0, 0.38, floorVisibility);
 }
 
+${lifeShader}
+
 vec3 renderAboveWater(vec3 origin, vec3 ray) {
   float distanceToSurface;
   vec3 surfacePosition;
-  if (!intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition)) {
-    return atmosphere(ray, 1.0, 1.0, 0.0);
+  bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
+  float lifeDistance;
+  vec3 lifeRadiance;
+  if (shadeFish(origin, ray, surfaceHit ? distanceToSurface : 200.0, false, lifeDistance, lifeRadiance)) {
+    return lifeRadiance;
   }
+  if (!surfaceHit) return atmosphere(ray, 1.0, 1.0, 0.0);
 
   float horizonDetail = smoothstep(0.006, 0.07, -ray.y);
   vec3 opticalNormal;
@@ -1852,8 +1875,9 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
   vec3 reflected = meanSkyRadiance(ray, opticalNormal, tangent, bitangent, slopeVariance);
   if (u_debugView > 5.5) return encodeScene(reflected, vec3(1.0), 0.92);
   vec3 refractedDirection = refract(ray, opticalNormal, 1.0 / WATER_IOR);
-  vec3 refracted = sampleUnderwaterRay(
-    surfacePosition + refractedDirection * 0.025,
+  vec3 refracted = sampleRefractedScene(
+    surfacePosition,
+    ray,
     refractedDirection,
     g_crossing ? 2 : 3
   );
@@ -1913,9 +1937,14 @@ vec3 renderBelowWaterSurface(vec3 origin, vec3 ray) {
   vec3 extinction = waterExtinctionCoefficient();
   float distanceToSurface;
   vec3 surfacePosition;
-  if (!intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition)) {
-    return sampleUnderwaterRay(origin, ray, g_crossing ? 3 : 6);
+  bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
+  float lifeDistance;
+  vec3 lifeRadiance;
+  if (shadeFish(origin, ray, surfaceHit ? distanceToSurface : 52.0, true, lifeDistance, lifeRadiance)) {
+    return lifeRadiance * exp(-extinction * lifeDistance)
+      + underwaterVolume(origin, ray, lifeDistance, g_crossing ? 2 : 3);
   }
+  if (!surfaceHit) return sampleUnderwaterRay(origin, ray, g_crossing ? 3 : 6);
 
   float roughFootprint = mix(
     0.28,
@@ -2146,6 +2175,11 @@ export type RippleFrame = {
   count: number;
 };
 
+export type LifeFrame = {
+  actors: Float32Array;
+  school: SchoolBounds;
+};
+
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
   const vertexArray = gl.createVertexArray();
   const buffer = gl.createBuffer();
@@ -2341,6 +2375,7 @@ const INTERACTION_SCROLL_LIMIT = 0.16;
 const INTERACTION_DISTANCE = 40;
 const TAP_RIPPLE_AMPLITUDE = 0.14;
 const MAX_LIFE_STEP_SECONDS = 0.1;
+const LIFE_SUBSTEP_SECONDS = 1 / 30;
 const INTERACTIVE_SELECTOR = [
   "a", "button", "input", "select", "textarea", "label", "summary",
   "[role='slider']", "[role='button']", "[contenteditable='true']",
@@ -2457,6 +2492,8 @@ async function createPondEngine(
     noise, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.generateMipmap(gl.TEXTURE_2D);
+  const actorTexture = createTexture(gl, ACTOR_TEXTURE_WIDTH, ACTOR_TEXTURE_ROWS,
+    gl.RGBA32F, gl.RGBA, gl.FLOAT, null, gl.NEAREST);
   const initialSpectrum = createTexture(gl, quality.simulationSize * OCEAN_CASCADE_COUNT,
     quality.simulationSize, gl.RGBA32F, gl.RGBA, gl.FLOAT, cascades.initial, gl.NEAREST);
   const spectrumTargets = [
@@ -2738,6 +2775,12 @@ async function createPondEngine(
     waveData: getUniform(gl, displayProgram, "u_waveData[0]"),
     wavePhase: getUniform(gl, displayProgram, "u_wavePhase[0]"),
     absorption: getUniform(gl, displayProgram, "u_absorption"),
+    actors: getUniform(gl, displayProgram, "u_actors"),
+    fishCount: getUniform(gl, displayProgram, "u_fishCount"),
+    lifeLow: getUniform(gl, displayProgram, "u_lifeLow"),
+    lifeHigh: getUniform(gl, displayProgram, "u_lifeHigh"),
+    airLow: getUniform(gl, displayProgram, "u_airLow"),
+    airHigh: getUniform(gl, displayProgram, "u_airHigh"),
   };
 
   const rippleUniforms = {
@@ -2844,6 +2887,7 @@ async function createPondEngine(
   gl.uniform1i(displayUniforms.varianceTable, 4);
   gl.uniform1i(displayUniforms.surface, 5);
   gl.uniform1i(displayUniforms.surfaceParameter, 6);
+  gl.uniform1i(displayUniforms.actors, 9);
   gl.uniform1f(displayUniforms.gridSize, quality.simulationSize);
   gl.uniform1f(displayUniforms.domainSize, WATER_DOMAIN_METERS);
   gl.uniform1f(displayUniforms.floorDepth, OCEAN_DEPTH_METERS);
@@ -3081,6 +3125,7 @@ async function createPondEngine(
     light: SceneLight,
     oceanTime: number,
     ripples: RippleFrame,
+    life: LifeFrame,
   ) => {
     rippleFrame = ripples;
     if (oceanTime !== spectrumTime) {
@@ -3194,6 +3239,17 @@ async function createPondEngine(
     }
     gl.uniform1f(displayUniforms.oceanTime, oceanTime);
     applyRipples(rippleUniforms.display);
+    const { school } = life;
+    if (school.count > 0) {
+      bindTexture(gl, actorTexture, 9);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, ACTOR_TEXTURE_WIDTH, ACTOR_TEXTURE_ROWS,
+        gl.RGBA, gl.FLOAT, life.actors);
+    }
+    gl.uniform1i(displayUniforms.fishCount, school.count);
+    gl.uniform3f(displayUniforms.lifeLow, school.low[0], school.low[1], school.low[2]);
+    gl.uniform3f(displayUniforms.lifeHigh, school.high[0], school.high[1], school.high[2]);
+    gl.uniform3f(displayUniforms.airLow, school.airLow[0], school.airLow[1], school.airLow[2]);
+    gl.uniform3f(displayUniforms.airHigh, school.airHigh[0], school.airHigh[1], school.airHigh[2]);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
     if (scaled) {
@@ -3251,6 +3307,7 @@ async function createPondEngine(
     }
     gl.deleteTexture(initialSpectrum);
     gl.deleteTexture(distantNoiseTexture);
+    gl.deleteTexture(actorTexture);
     gl.deleteTexture(displacementTexture);
     gl.deleteTexture(gradientTexture);
     gl.deleteTexture(varianceTexture);
@@ -3407,6 +3464,28 @@ export default function PondSurface({
     const gestures = createGestureTracker();
     // Real seconds of scene motion. Ripples and other life use this clock.
     let lifeTime = 0;
+    const lifeRandom = seededRandom((waveField.seed ^ 0x51f15e) >>> 0);
+    const surfaceAt = (x: number, z: number) => spectralHeightAt(waveField, x, z, oceanTime);
+    const schoolEnvironment = (scroll: number): SchoolEnvironment => ({
+      time: lifeTime,
+      home: getSchoolHome(lifeTime, getOceanCamera(scroll, seedPhase), scroll, -OCEAN_DEPTH_METERS),
+      homeRadius: 2.2,
+      floor: -OCEAN_DEPTH_METERS,
+      surfaceAt,
+      stimuli: [],
+      pellets: [],
+    });
+    const school: Fish[] = createSchool(quality.fishCount, schoolEnvironment(0).home, lifeRandom);
+    // Settle the school before the first frame, so a still frame shows a formed school.
+    for (let step = 0; step < 90; step += 1) stepSchool(school, schoolEnvironment(0), 1 / 30);
+    const actors = new Float32Array(ACTOR_TEXTURE_WIDTH * ACTOR_TEXTURE_ROWS * 4);
+    const lifeFrame: LifeFrame = { actors, school: packSchool(school, actors, surfaceAt) };
+    const advanceLife = (seconds: number) => {
+      const steps = Math.ceil(seconds / LIFE_SUBSTEP_SECONDS);
+      for (let step = 0; step < steps; step += 1) {
+        stepSchool(school, schoolEnvironment(renderedScrollProgress), seconds / steps);
+      }
+    };
 
     const frameGate = createWebGLFrameGate(gl);
     const frameBudget = createWaterFrameBudget(frameInterval, quality.name);
@@ -3570,11 +3649,16 @@ export default function PondSurface({
 
       if (!reducedMotion && previewTime === null) {
         oceanTime += (warmingUp ? startupFrames === 0 ? 0 : 1 / 30 : frameSeconds) * OCEAN_PLAYBACK_RATE;
-        if (!warmingUp) lifeTime += Math.min(frameSeconds, lifeStepLimit);
+        if (!warmingUp) {
+          const lifeSeconds = Math.min(frameSeconds, lifeStepLimit);
+          lifeTime += lifeSeconds;
+          advanceLife(lifeSeconds);
+        }
       }
       if (isInteractive()) handleGestures(gestures.poll(timestamp));
       else gestures.cancel();
       rippleFrame.count = ripples.pack(lifeTime, rippleFrame.data);
+      lifeFrame.school = packSchool(school, lifeFrame.actors, surfaceAt);
 
       const currentCelestial = previewCelestial ?? celestialRef.current;
       if (currentCelestial !== lightState || renderWidth !== lightWidth || renderHeight !== lightHeight) {
@@ -3592,6 +3676,7 @@ export default function PondSurface({
         sceneLight,
         oceanTime,
         rippleFrame,
+        lifeFrame,
       );
       frameGate.submit();
       startupFrames += 1;
