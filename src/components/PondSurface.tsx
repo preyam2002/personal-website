@@ -19,8 +19,14 @@ import {
   getOceanCamera,
   getOceanSeedPhase,
   intersectHorizontalPlane,
+  type Vector3,
 } from "@/lib/oceanCamera";
-import { createGestureTracker, type GestureEvent } from "@/lib/oceanGestures";
+import {
+  FAST_POINTER_SPEED,
+  createGestureTracker,
+  smoothPointerSpeed,
+  type GestureEvent,
+} from "@/lib/oceanGestures";
 import { RIPPLE_SLOTS, createRipplePool, rippleShader } from "@/lib/oceanRipples";
 import {
   ACTOR_TEXTURE_ROWS,
@@ -32,6 +38,7 @@ import {
   type Fish,
   type SchoolBounds,
   type SchoolEnvironment,
+  type SchoolStimulus,
 } from "@/lib/oceanLife";
 import { lifeShader } from "@/lib/oceanLifeShaders";
 import {
@@ -2375,6 +2382,7 @@ const INTERACTION_SCROLL_LIMIT = 0.16;
 const INTERACTION_DISTANCE = 40;
 const TAP_RIPPLE_AMPLITUDE = 0.14;
 const MAX_LIFE_STEP_SECONDS = 0.1;
+const POINTER_MEMORY_SECONDS = 6;
 const LIFE_SUBSTEP_SECONDS = 1 / 30;
 const INTERACTIVE_SELECTOR = [
   "a", "button", "input", "select", "textarea", "label", "summary",
@@ -3464,6 +3472,37 @@ export default function PondSurface({
     const gestures = createGestureTracker();
     // Real seconds of scene motion. Ripples and other life use this clock.
     let lifeTime = 0;
+    // The pointer attracts the fish when it moves slowly and scatters them when it moves fast.
+    const pointer = {
+      point: null as Vector3 | null,
+      clientX: 0,
+      clientY: 0,
+      speed: 0,
+      movedAt: 0,
+      lifeTime: 0,
+      fleeUntil: 0,
+    };
+    const threats: { point: Vector3; until: number }[] = [];
+    const stimuli: SchoolStimulus[] = [];
+    const updateStimuli = (timestamp: number) => {
+      stimuli.length = 0;
+      const recent = pointer.point && lifeTime - pointer.lifeTime < POINTER_MEMORY_SECONDS;
+      if (recent && pointer.point && isInteractive()) {
+        const speed = pointer.speed * Math.exp(-Math.max(timestamp - pointer.movedAt, 0) / 150);
+        if (speed > FAST_POINTER_SPEED) pointer.fleeUntil = lifeTime + 0.4;
+        const flee = lifeTime < pointer.fleeUntil;
+        stimuli.push({
+          position: [pointer.point[0], -0.6, pointer.point[2]],
+          radius: flee ? 2.6 : 5,
+          strength: flee ? 9 : 2,
+          mode: flee ? "flee" : "follow",
+        });
+      }
+      for (let index = threats.length - 1; index >= 0; index -= 1) {
+        if (threats[index].until < lifeTime) threats.splice(index, 1);
+        else stimuli.push({ position: threats[index].point, radius: 3, strength: 12, mode: "flee" });
+      }
+    };
     const lifeRandom = seededRandom((waveField.seed ^ 0x51f15e) >>> 0);
     const surfaceAt = (x: number, z: number) => spectralHeightAt(waveField, x, z, oceanTime);
     const schoolEnvironment = (scroll: number): SchoolEnvironment => ({
@@ -3472,7 +3511,7 @@ export default function PondSurface({
       homeRadius: 2.2,
       floor: -OCEAN_DEPTH_METERS,
       surfaceAt,
-      stimuli: [],
+      stimuli,
       pellets: [],
     });
     const school: Fish[] = createSchool(quality.fishCount, schoolEnvironment(0).home, lifeRandom);
@@ -3657,6 +3696,7 @@ export default function PondSurface({
       }
       if (isInteractive()) handleGestures(gestures.poll(timestamp));
       else gestures.cancel();
+      updateStimuli(timestamp);
       rippleFrame.count = ripples.pack(lifeTime, rippleFrame.data);
       lifeFrame.school = packSchool(school, lifeFrame.actors, surfaceAt);
 
@@ -3708,7 +3748,9 @@ export default function PondSurface({
       for (const event of events) {
         if (event.type !== "tap") continue;
         const point = toWaterPoint(event.x, event.y);
-        if (point) ripples.add(point[0], point[2], TAP_RIPPLE_AMPLITUDE, lifeTime);
+        if (!point) continue;
+        ripples.add(point[0], point[2], TAP_RIPPLE_AMPLITUDE, lifeTime);
+        threats.push({ point: [point[0], -0.5, point[2]], until: lifeTime + 0.5 });
       }
     };
 
@@ -3721,6 +3763,23 @@ export default function PondSurface({
     const onPointerMove = (event: PointerEvent) => {
       if (!event.isPrimary) return;
       handleGestures(gestures.move(event.pointerId, event.clientX, event.clientY, event.timeStamp));
+      if (!isInteractive()) return;
+      const point = isSceneTarget(event) ? toWaterPoint(event.clientX, event.clientY) : null;
+      if (point && pointer.point && pointer.movedAt > 0) {
+        pointer.speed = smoothPointerSpeed(
+          pointer.speed,
+          Math.hypot(event.clientX - pointer.clientX, event.clientY - pointer.clientY),
+          (event.timeStamp - pointer.movedAt) / 1000,
+          window.innerHeight,
+        );
+      } else {
+        pointer.speed = 0;
+      }
+      pointer.point = point;
+      pointer.clientX = event.clientX;
+      pointer.clientY = event.clientY;
+      pointer.movedAt = event.timeStamp;
+      pointer.lifeTime = lifeTime;
     };
     const onPointerUp = (event: PointerEvent) => {
       if (!event.isPrimary || !isInteractive()) return;
