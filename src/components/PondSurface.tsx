@@ -3756,6 +3756,7 @@ export default function PondSurface({
     const pellets: Pellet[] = [];
     let nextPelletId = 0;
     let pressedAt = -Infinity;
+    let gesturePointer = "";
     const wake = { point: null as Vector3 | null, time: 0 };
     // Probe results come back one frame later. The keys connect them to their objects.
     const probeSamples = new Map<string, ProbeSample>();
@@ -4150,7 +4151,7 @@ export default function PondSurface({
           nextPelletId = dropPellets(pellets, point[0], point[2], event.repeat === 0 ? 4 : 2,
             quality.pelletCount, surfaceAt, lifeRandom, nextPelletId);
           ripples.add(point[0], point[2], PELLET_RIPPLE_AMPLITUDE, lifeTime);
-          pressedAt = performance.now();
+          if (gesturePointer === "touch") pressedAt = performance.now();
           continue;
         }
         if (event.type === "drag") {
@@ -4207,6 +4208,7 @@ export default function PondSurface({
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || !isInteractive() || !isSceneTarget(event)) return;
       wake.point = null;
+      gesturePointer = event.pointerType;
       gestures.down(event.pointerId, event.clientX, event.clientY, event.timeStamp);
     };
     const onPointerMove = (event: PointerEvent) => {
@@ -4236,6 +4238,7 @@ export default function PondSurface({
     };
     const onPointerCancel = (event: PointerEvent) => gestures.cancel(event.pointerId);
     // A touch long press that fed the fish must not also open the context menu.
+    // A mouse right-click keeps its menu.
     const onContextMenu = (event: MouseEvent) => {
       if (performance.now() - pressedAt < 800 && !(event.target instanceof Element
         && event.target.closest(INTERACTIVE_SELECTOR))) event.preventDefault();
