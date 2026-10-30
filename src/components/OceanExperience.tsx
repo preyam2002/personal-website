@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { KeyboardEvent, PointerEvent } from "react";
-import PondSurface from "@/components/PondSurface";
+import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
+import dynamic from "next/dynamic";
+import type { PondSurfaceStatus } from "@/components/PondSurface";
 import { getDaylightWindow } from "@/lib/celestial";
 import { getSessionOceanSeed } from "@/lib/oceanWaves";
+import { getWaterQuality } from "@/lib/waterQuality";
 import {
   dialAngleToMinute,
   dialArcPath,
@@ -14,9 +16,14 @@ import {
 } from "@/lib/skyClock";
 import styles from "./OceanExperience.module.css";
 
+const loadPondSurface = () => import("@/components/PondSurface");
+const PondSurface = dynamic(loadPondSurface, { ssr: false });
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+
 type OceanExperienceProps = {
   stageId: string;
   surfaceClassName: string;
+  fallback: ReactNode;
 };
 
 const DEFAULT_DATE = Date.UTC(2026, 7, 30, 14, 30);
@@ -31,10 +38,7 @@ function dateAtMinute(baseDateMs: number, minute: number) {
 }
 
 function formatTime(dateMs: number) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(dateMs));
+  return timeFormat.format(dateMs);
 }
 
 const DIAL_RADIUS = 22;
@@ -129,19 +133,52 @@ function SkyClock({
 export default function OceanExperience({
   stageId,
   surfaceClassName,
+  fallback,
 }: OceanExperienceProps) {
   const [now, setNow] = useState<number | null>(null);
   const [seed, setSeed] = useState<number | null>(null);
   const [previewMinute, setPreviewMinute] = useState<number | null>(null);
+  const [surfaceStatus, setSurfaceStatus] = useState<PondSurfaceStatus>("pending");
 
   useEffect(() => {
-    const updateNow = () => setNow(Date.now());
-    const updateSeed = () => setSeed(getSessionOceanSeed());
-    updateNow();
-    updateSeed();
-    const timer = window.setInterval(updateNow, 1_000);
-    return () => window.clearInterval(timer);
+    let frame = 0;
+    let ready = false;
+    const start = () => {
+      if (document.hidden || ready) return;
+      ready = true;
+      if (getWaterQuality() === "static") {
+        setSurfaceStatus("fallback");
+        return;
+      }
+      void loadPondSurface().catch(() => undefined);
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => setSeed(getSessionOceanSeed()));
+      });
+    };
+    start();
+    document.addEventListener("visibilitychange", start);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", start);
+    };
   }, []);
+
+  useEffect(() => {
+    let timer = 0;
+    const update = () => {
+      window.clearTimeout(timer);
+      if (document.hidden) return;
+      const time = Date.now();
+      setNow(time);
+      if (previewMinute === null) timer = window.setTimeout(update, 30_000 - time % 30_000);
+    };
+    update();
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [previewMinute]);
 
   const baseDateMs = now ?? DEFAULT_DATE;
   const liveDate = new Date(baseDateMs);
@@ -162,7 +199,8 @@ export default function OceanExperience({
 
   return (
     <>
-      {seed !== null && (
+      {surfaceStatus === "fallback" && fallback}
+      {seed !== null && now !== null && (
         <PondSurface
           className={surfaceClassName}
           dateMs={dateMs}
@@ -170,9 +208,10 @@ export default function OceanExperience({
           longitude={LONGITUDE}
           seed={seed}
           stageId={stageId}
+          onStatusChange={setSurfaceStatus}
         />
       )}
-      <div className={styles.instrument} aria-label="Sky time">
+      {now !== null && surfaceStatus === "active" && <div className={styles.instrument} aria-label="Sky time">
         <SkyClock
           minute={shownMinute}
           onChange={setPreviewMinute}
@@ -182,7 +221,7 @@ export default function OceanExperience({
         />
         <div className={styles.readout}>
           <time dateTime={new Date(dateMs).toISOString()}>
-            {now === null ? "Time" : formatTime(dateMs)}
+            {formatTime(dateMs)}
           </time>
           {previewMinute === null ? (
             <span className={styles.liveLabel}>Live</span>
@@ -197,7 +236,7 @@ export default function OceanExperience({
             </button>
           )}
         </div>
-      </div>
+      </div>}
     </>
   );
 }

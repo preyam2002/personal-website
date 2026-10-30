@@ -1,12 +1,12 @@
 # Preyam Rao — Personal Website
 
-A responsive personal portfolio built as a live systems observatory: a procedural signal field, evidence-led project case studies, field notes, and a separate editorial reading mode for long-form dispatches.
+A personal portfolio with a live ocean background, work experience, and contact links. The water site is the homepage at `/`.
 
 ## Stack
 
 - Next.js 16, React 19, and strict TypeScript
 - Tailwind CSS v4 plus scoped custom CSS
-- Canvas 2D for the interactive signal field
+- WebGL 2 for the ocean background
 - Framer Motion and Three.js for experimental routes
 - MDX for dispatches
 - Jest for unit tests
@@ -24,9 +24,10 @@ npm start
 
 ## Structure
 
-- `src/app/page.tsx` — portfolio composition and project content
-- `src/components/SignalField.tsx` — deterministic pointer-reactive hero canvas
-- `src/app/globals.css` — shared editorial styles plus the scoped observatory system
+- `src/app/page.tsx` — water homepage and portfolio content
+- `src/components/PondSurface.tsx` — ocean renderer
+- `src/app/water/water.module.css` — water page styles
+- `src/app/globals.css` — shared styles
 - `src/content/dispatches/` — MDX writing
 - `src/app/lab/` and `src/app/lab-3d/` — experimental interaction routes
 
@@ -48,3 +49,5 @@ Official references: [responsive frontend workflow](https://learn.chatgpt.com/us
 ## Deployment
 
 The production site is configured for Vercel. Set `NEXT_PUBLIC_SITE_URL` for a custom canonical origin; otherwise it falls back to `https://preyam-rao.vercel.app`.
+
+`/water` permanently redirects to `/`. The water assets and study routes retain their existing paths.

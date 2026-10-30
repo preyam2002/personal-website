@@ -2,33 +2,35 @@ import type { Metadata } from "next";
 import {
   Bricolage_Grotesque,
   Fraunces,
-  Newsreader,
-  JetBrains_Mono,
 } from "next/font/google";
+import localFont from "next/font/local";
 import Keybindings from "@/components/Keybindings";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
+import "./jetbrains-mono.css";
 
 const fraunces = Fraunces({
   variable: "--font-display",
   subsets: ["latin"],
   style: ["normal", "italic"],
   display: "swap",
+  preload: false,
 });
 
-const newsreader = Newsreader({
+const newsreader = localFont({
   variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
-  style: ["normal", "italic"],
+  src: [
+    { path: "../../public/fonts/newsreader/newsreader-normal-vietnamese.woff2", style: "normal" },
+    { path: "../../public/fonts/newsreader/newsreader-normal-latin-ext.woff2", style: "normal" },
+    { path: "../../public/fonts/newsreader/newsreader-normal-latin.woff2", style: "normal" },
+    { path: "../../public/fonts/newsreader/newsreader-italic-vietnamese.woff2", style: "italic" },
+    { path: "../../public/fonts/newsreader/newsreader-italic-latin-ext.woff2", style: "italic" },
+    { path: "../../public/fonts/newsreader/newsreader-italic-latin.woff2", style: "italic" },
+  ],
+  weight: "300 600",
+  adjustFontFallback: "Times New Roman",
   display: "swap",
-});
-
-const jetbrains = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
+  preload: false,
 });
 
 const bricolage = Bricolage_Grotesque({
@@ -83,9 +85,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${newsreader.variable} ${jetbrains.variable} ${bricolage.variable}`}
+      className={`${fraunces.variable} ${newsreader.variable} jetbrainsMono ${bricolage.variable}`}
     >
       <head>
+        <link rel="preload" href="/fonts/jetbrains-mono/jetbrains-mono-5.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#1544ff" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

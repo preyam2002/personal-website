@@ -1,0 +1,695 @@
+.gallery {
+  background: #eeeee7;
+  color: #182b2b;
+  min-height: 100dvh;
+  padding: 0 5vw 40px;
+  font-family: var(--font-observatory), sans-serif;
+}
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 90px;
+  border-bottom: 1px solid #c9d0c8;
+  font-size: 13px;
+}
+.nav > a:first-child {
+  font-size: 22px;
+  font-weight: 600;
+}
+.nav span {
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 14px;
+}
+.nav a:last-child,
+.footer a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.heading {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  align-items: end;
+  padding: 65px 0 60px;
+  gap: 50px;
+}
+.eyebrow {
+  text-transform: uppercase;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+.heading h1 {
+  font-size: clamp(65px, 7.8vw, 130px);
+  line-height: 0.94;
+  letter-spacing: -0.065em;
+  font-weight: 400;
+  margin-top: 25px;
+}
+.heading em {
+  font-family: var(--font-display), serif;
+  font-weight: 400;
+  color: #447367;
+}
+.headingAside {
+  max-width: 330px;
+  justify-self: end;
+  padding-bottom: 4px;
+}
+.headingAside > p:first-child {
+  font-size: 22px;
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+}
+.instructions {
+  font-size: 13px;
+  color: #5b7069;
+  margin-top: 24px;
+}
+.selected {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 18px;
+  font-size: 12px;
+  color: #245c47;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 48px 28px;
+}
+.card {
+  min-width: 0;
+}
+.visual {
+  width: 100%;
+  aspect-ratio: 1.65;
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: #153b42;
+  border: 0;
+  text-align: left;
+  color: #f5f4e9;
+  cursor: pointer;
+}
+.cardCanvas,
+.fullCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+
+canvas.cardCanvas[data-webgl],
+canvas.fullCanvas[data-webgl] {
+  opacity: 0;
+}
+
+canvas.cardCanvas[data-webgl="active"],
+canvas.fullCanvas[data-webgl="active"] {
+  opacity: 1;
+}
+.miniName {
+  position: absolute;
+  left: 7%;
+  bottom: 15%;
+  font-size: clamp(38px, 4.5vw, 80px);
+  line-height: 0.87;
+  letter-spacing: -0.05em;
+  pointer-events: none;
+}
+.pond .miniName,
+.rain .miniName,
+.ice .miniName {
+  font-family: var(--font-display), serif;
+  font-style: italic;
+}
+.depth .miniName {
+  left: 0;
+  width: 100%;
+  text-align: center;
+  bottom: 28%;
+}
+.glow .miniName {
+  color: #a9f4da;
+}
+.shore .miniName {
+  color: #202e28;
+}
+.flow .miniName {
+  font-family: var(--font-mono);
+  font-size: clamp(30px, 3vw, 55px);
+  letter-spacing: -0.07em;
+}
+.open {
+  background: #06272dd6;
+  color: #f5f4e9;
+  padding: 7px 10px;
+  position: absolute;
+  right: 22px;
+  bottom: 20px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chosen {
+  position: absolute;
+  right: 20px;
+  top: 18px;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 11px;
+  background: #e6f0dd;
+  color: #183f32;
+  padding: 7px 10px;
+}
+.caption {
+  padding-top: 19px;
+}
+.caption > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.number {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #5e746b;
+}
+.caption h2 {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+.kind {
+  margin-left: auto;
+  font-size: 10px;
+  color: #5b6b66;
+}
+.subtitle {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  margin-top: 9px;
+}
+.detail {
+  font-size: 13px;
+  line-height: 1.65;
+  max-width: 450px;
+  color: #54645f;
+  margin-top: 9px;
+}
+.textButton {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  color: #215746;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.footer {
+  margin-top: 65px;
+  border-top: 1px solid #c9d0c8;
+  padding-top: 24px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 10px;
+  color: #5b7069;
+}
+.preview {
+  background: #0e3842;
+  color: #f0f3e5;
+  min-height: 100dvh;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--font-observatory), sans-serif;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-areas: "nav nav" "portfolio console" "work console";
+  column-gap: 5vw;
+  padding: 0 4vw 38px;
+}
+.fullCanvas {
+  position: fixed;
+  touch-action: pan-y;
+}
+.scrim {
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(180deg, #001820b3, transparent 150px),
+    linear-gradient(90deg, #001820ad 0%, #001820a6 62%, #00182033 100%);
+  pointer-events: none;
+}
+.previewNav {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 28px 4vw;
+  font-size: 12px;
+  gap: 20px;
+  grid-area: nav;
+  padding-left: 0;
+  padding-right: 0;
+  z-index: 1;
+}
+.previewNav button,
+.previewNav a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.previewNav > span {
+  font-size: 18px;
+}
+.portfolio {
+  position: relative;
+  padding: 9vh 0 5vh 2vw;
+  max-width: 1100px;
+  pointer-events: none;
+  grid-area: portfolio;
+  z-index: 1;
+}
+.portfolio a {
+  pointer-events: auto;
+}
+.portfolio h1 {
+  font-size: clamp(48px, 6vw, 100px);
+  line-height: 1.02;
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  margin: 24px 0;
+}
+.intro {
+  font-size: 16px;
+  max-width: 335px;
+  line-height: 1.6;
+}
+.workLink {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: fit-content;
+  font-size: 12px;
+  margin-top: 28px;
+  border-bottom: 1px solid #ffffff70;
+  padding-bottom: 8px;
+}
+.pond .portfolio h1,
+.rain .portfolio h1,
+.ice .portfolio h1 {
+  font-family: var(--font-display);
+  font-style: italic;
+}
+.depth .portfolio {
+  margin: auto;
+  text-align: center;
+  padding-top: 9vh;
+  max-width: none;
+}
+.depth .intro,
+.depth .workLink {
+  margin-left: auto;
+  margin-right: auto;
+}
+.glow .portfolio h1 {
+  color: #bbffe4;
+}
+.shore {
+  color: #192e28;
+}
+.shore .scrim {
+  background:
+    linear-gradient(180deg, #eee7d8bf, transparent 150px),
+    linear-gradient(90deg, #eee7d8e0 0%, #eee7d8d1 62%, #eee7d833 100%);
+}
+.flow .portfolio h1 {
+  font-family: var(--font-mono);
+  font-size: clamp(48px, 6vw, 95px);
+}
+.rain .portfolio {
+  max-width: 790px;
+}
+.work {
+  position: relative;
+  margin: 0 0 0 2vw;
+  width: auto;
+  grid-area: work;
+  max-width: 550px;
+  z-index: 1;
+}
+.work > span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.75;
+}
+.work a {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  font-size: 19px;
+  padding: 14px 0;
+  border-bottom: 1px solid #ffffff35;
+}
+.work small {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-left: auto;
+}
+.console {
+  position: relative;
+  float: none;
+  margin: 40px 0 0;
+  width: auto;
+  background: #f0f1e9;
+  color: #203d37;
+  padding: 22px;
+  box-shadow: 0 12px 50px #041c2533;
+  grid-area: console;
+  align-self: end;
+  z-index: 1;
+}
+.consoleHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.console h2 {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+.console button {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.consoleHeading button {
+  background: none;
+  color: inherit;
+  align-self: start;
+}
+.console > p {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 12px 0 20px;
+  color: #586c62;
+}
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.controls label {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.controls input {
+  display: block;
+  width: 100%;
+  accent-color: #316b5b;
+  margin-top: 12px;
+  cursor: pointer;
+}
+.controls > button {
+  background: #dfe6da;
+  padding: 10px;
+  color: #315a4c;
+}
+.consoleBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 22px;
+  gap: 10px;
+  font-size: 9px;
+}
+.pick {
+  background: #214f40;
+  color: #fff;
+  padding: 11px 13px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.switcher {
+  display: flex;
+  gap: 5px;
+  border-top: 1px solid #ccd5c8;
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.switcher button {
+  flex: 1;
+  padding: 7px 0;
+  background: transparent;
+  color: #536b60;
+  font-size: 11px;
+  min-height: 36px;
+}
+.switcher button[aria-pressed="true"] {
+  background: #d5e3d6;
+  color: #183e30;
+}
+:is(.gallery, .preview) :is(button, a, input):focus-visible {
+  outline: 2px solid #8cbca6;
+  outline-offset: 5px;
+}
+.visual:hover .open {
+  background: #06272dd6;
+  color: #f5f4e9;
+  padding: 7px 10px;
+  text-decoration: underline;
+}
+.galleryMotion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 28px;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.portfolio h1:focus {
+  outline: none;
+}
+.depth .portfolio h1 {
+  font-size: clamp(45px, 5.2vw, 88px);
+}
+.choiceStatus {
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 12px;
+  color: #215746;
+}
+.saveError {
+  font-size: 12px;
+  margin-top: 12px;
+  color: #8c302a;
+}
+.sceneError {
+  position: absolute;
+  z-index: 2;
+  top: 85px;
+  left: 24px;
+  right: 24px;
+  max-width: 550px;
+  background: #f0f1e9;
+  color: #203d37;
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.visual .sceneError {
+  top: 15px;
+  left: 15px;
+  right: 15px;
+  font-size: 11px;
+}
+.consoleHeading > button {
+  padding: 8px;
+  margin: -8px;
+}
+@media (min-width: 1600px) {
+  .gallery {
+    padding-left: max(5vw, calc((100vw - 1500px) / 2));
+    padding-right: max(5vw, calc((100vw - 1500px) / 2));
+  }
+}
+@media (max-width: 980px) {
+  .preview {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "nav" "portfolio" "work" "console";
+    padding: 0 24px 24px;
+  }
+  .previewNav {
+    padding: 20px 0;
+  }
+  .portfolio,
+  .depth .portfolio {
+    padding: 50px 0 36px;
+    margin: 0;
+  }
+  .portfolio h1,
+  .depth .portfolio h1 {
+    font-size: clamp(44px, 8vw, 76px);
+  }
+  .work {
+    width: auto;
+    margin: 0;
+    max-width: 550px;
+  }
+  .console {
+    width: 100%;
+    margin: 30px 0 0;
+    max-width: 550px;
+    justify-self: end;
+  }
+  .switcher button {
+    min-height: 44px;
+  }
+  .previewNav > span {
+    display: none;
+  }
+}
+@media (max-width: 800px) {
+  .heading {
+    gap: 25px;
+    grid-template-columns: 1fr;
+    padding: 40px 0;
+  }
+  .headingAside {
+    justify-self: start;
+    max-width: 420px;
+  }
+  .headingAside > p:first-child {
+    font-size: 18px;
+  }
+  .grid {
+    gap: 35px 18px;
+  }
+  .kind {
+    display: none;
+  }
+  .caption h2 {
+    font-size: 20px;
+  }
+  .miniName {
+    font-size: 45px;
+  }
+  .open {
+    background: #06272dd6;
+    color: #f5f4e9;
+    padding: 7px 10px;
+    right: 12px;
+    bottom: 12px;
+    font-size: 9px;
+  }
+  .footer {
+    flex-wrap: wrap;
+  }
+  .fullCanvas {
+    height: 100dvh;
+  }
+  .preview {
+    overflow: visible;
+  }
+}
+@media (max-width: 520px) {
+  .gallery {
+    padding: 0 20px 30px;
+  }
+  .nav {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 84px;
+    padding: 16px 0;
+  }
+  .nav span {
+    margin-left: 5px;
+    font-size: 10px;
+  }
+  .nav a:last-child {
+    font-size: 10px;
+  }
+  .heading h1 {
+    font-size: clamp(55px, 18.5vw, 76px);
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .miniName {
+    font-size: 62px;
+  }
+  .visual {
+    aspect-ratio: 1.45;
+  }
+  .kind {
+    display: none;
+    font-size: 9px;
+  }
+  .portfolio h1 {
+    font-size: 54px;
+  }
+  .footer p {
+    max-width: 250px;
+  }
+  .nav > a:first-child {
+    flex: 1 0 100%;
+  }
+  .galleryMotion {
+    margin: 0 auto 0 0;
+    font-size: 11px;
+    padding: 6px 0;
+  }
+  .portfolio h1,
+  .depth .portfolio h1,
+  .flow .portfolio h1 {
+    font-size: clamp(39px, 10.8vw, 54px);
+  }
+  .console {
+    padding: 18px;
+  }
+  .previewNav {
+    font-size: 11px;
+    gap: 10px;
+  }
+  .work a {
+    gap: 10px;
+  }
+  .work small {
+    font-size: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gallery,
+  .preview {
+    scroll-behavior: auto;
+  }
+}

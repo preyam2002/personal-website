@@ -1,17 +1,47 @@
-import { getSolarPosition } from "./celestial";
+import { getCelestialState, getSolarPosition } from "./celestial";
 import {
   GRAVITY,
-  OCEAN_SWELL_COMPONENT_COUNT,
+  DISTANT_CREST_NOISE_SIZE,
   OCEAN_WAVE_COMPONENT_COUNT,
+  createDistantCrestNoise,
   createOceanWaveField,
   describeSeaState,
   getDisplaySunDirection,
+  getMoonPhaseLight,
   getSceneSunDirection,
   getStarFieldTransform,
   getSunAzimuthScale,
   rotateAboutY,
   seededRandom,
 } from "./oceanWaves";
+
+describe("createDistantCrestNoise", () => {
+  it("produces a stable, seed-specific RGBA texture", () => {
+    const first = createDistantCrestNoise(4603);
+    const again = createDistantCrestNoise(4603);
+    const other = createDistantCrestNoise(99);
+
+    expect(first).toHaveLength(DISTANT_CREST_NOISE_SIZE ** 2 * 4);
+    expect(first).toEqual(again);
+    expect(first).not.toEqual(other);
+    for (let index = 3; index < first.length; index += 4) {
+      expect(first[index]).toBe(255);
+    }
+  });
+
+  it("stores gradients that follow the value channel", () => {
+    const pixels = createDistantCrestNoise(4603);
+    const size = DISTANT_CREST_NOISE_SIZE;
+    const offset = (x: number, y: number) => (y * size + x) * 4;
+    for (const [x, y] of [[101, 201], [257, 347], [409, 93]]) {
+      const center = offset(x, y);
+      const dx = (pixels[offset(x + 1, y)] - pixels[offset(x - 1, y)]) / 255 / 0.5;
+      const dy = (pixels[offset(x, y + 1)] - pixels[offset(x, y - 1)]) / 255 / 0.5;
+      expect(Math.abs((pixels[center + 1] / 255 * 2 - 1) * 1.5 - dx)).toBeLessThan(0.12);
+      expect(Math.abs((pixels[center + 2] / 255 * 2 - 1) * 1.5 - dy)).toBeLessThan(0.12);
+    }
+  });
+});
 
 const LATITUDE = 15.2;
 const LONGITUDE = 73.7;
@@ -46,7 +76,7 @@ describe("createOceanWaveField", () => {
     expect(Array.from(other.data)).not.toEqual(Array.from(field.data));
   });
 
-  it("packs nine components with deep-water dispersion", () => {
+  it("packs the swell components with deep-water dispersion", () => {
     expect(field.data).toHaveLength(OCEAN_WAVE_COMPONENT_COUNT * 4);
     expect(field.phases).toHaveLength(OCEAN_WAVE_COMPONENT_COUNT);
 
@@ -56,7 +86,7 @@ describe("createOceanWaveField", () => {
       const amplitude = field.data[index * 4 + 3];
       expect(angularFrequency).toBeCloseTo(Math.sqrt(GRAVITY * waveNumber), 5);
       expect(amplitude).toBeGreaterThan(0);
-      expect(amplitude * waveNumber).toBeLessThan(0.05);
+      expect(amplitude * waveNumber).toBeLessThan(0.08);
       expect(field.phases[index]).toBeGreaterThanOrEqual(0);
       expect(field.phases[index]).toBeLessThan(Math.PI * 2);
     }
@@ -65,14 +95,14 @@ describe("createOceanWaveField", () => {
   it("keeps the swell group long and nearly aligned", () => {
     const wavelengths: number[] = [];
     const angles: number[] = [];
-    for (let index = 0; index < OCEAN_SWELL_COMPONENT_COUNT; index += 1) {
+    for (let index = 0; index < OCEAN_WAVE_COMPONENT_COUNT; index += 1) {
       const waveX = field.data[index * 4];
       const waveZ = field.data[index * 4 + 1];
       wavelengths.push((2 * Math.PI) / Math.hypot(waveX, waveZ));
       angles.push(Math.atan2(waveZ, waveX));
     }
-    expect(wavelengths[0]).toBeGreaterThanOrEqual(72);
-    expect(wavelengths[0]).toBeLessThanOrEqual(96);
+    expect(wavelengths[0]).toBeGreaterThanOrEqual(84);
+    expect(wavelengths[0]).toBeLessThanOrEqual(112);
     expect(wavelengths[1]).toBeLessThan(wavelengths[0]);
     expect(wavelengths[2]).toBeLessThan(wavelengths[1]);
     expect(wavelengths[2]).toBeGreaterThan(wavelengths[0] * 0.5);
@@ -89,13 +119,22 @@ describe("createOceanWaveField", () => {
     const state = describeSeaState(field);
     expect(state.windSpeed).toBeGreaterThanOrEqual(5.8);
     expect(state.windSpeed).toBeLessThanOrEqual(7.6);
-    expect(state.significantWaveHeight).toBeGreaterThan(0.4);
-    expect(state.significantWaveHeight).toBeLessThan(1.1);
-    expect(state.swellPeriod).toBeGreaterThan(6);
-    expect(state.swellPeriod).toBeLessThan(8.5);
+    expect(state.significantWaveHeight).toBeGreaterThan(0.58);
+    expect(state.significantWaveHeight).toBeLessThan(1.7);
+    expect(state.swellPeriod).toBeGreaterThan(7.2);
+    expect(state.swellPeriod).toBeLessThan(8.6);
     expect(state.cloudCover).toBeGreaterThan(0.2);
     expect(state.cloudCover).toBeLessThan(0.6);
     expect(vectorLength([...field.windDirection, 0])).toBeCloseTo(1, 6);
+  });
+
+  it.each([17321, 4603, 99, 248, 301])("keeps the displacement below the fold limit for seed %i", (seed) => {
+    const waves = createOceanWaveField(seed);
+    let maximumSlope = 0;
+    for (let offset = 0; offset < waves.data.length; offset += 4) {
+      maximumSlope += Math.hypot(waves.data[offset], waves.data[offset + 1]) * waves.data[offset + 3];
+    }
+    expect(maximumSlope * waves.choppiness).toBeLessThan(1);
   });
 });
 
@@ -192,6 +231,45 @@ describe("rotateAboutY", () => {
     expect(rotated[1]).toBeCloseTo(direction[1], 12);
     expect(rotated[2]).toBeCloseTo(Math.cos(azimuth + 0.25) * Math.cos(elevation), 9);
     expect(vectorLength(rotated)).toBeCloseTo(1, 9);
+  });
+});
+
+describe("getMoonPhaseLight", () => {
+  it("keeps an almost full moon lit after the sky remap", () => {
+    const state = getCelestialState(
+      new Date("2026-10-26T17:00:00Z"), LATITUDE, LONGITUDE,
+    );
+    const light = getMoonPhaseLight(state.sun, state.moon);
+    let inside = 0;
+    let lit = 0;
+    const size = 200;
+    for (let row = 0; row < size; row += 1) {
+      for (let column = 0; column < size; column += 1) {
+        const x = (column + 0.5) * 2 / size - 1;
+        const y = (row + 0.5) * 2 / size - 1;
+        const radiusSquared = x * x + y * y;
+        if (radiusSquared >= 1) continue;
+        inside += 1;
+        const sunlight = x * light[0] + y * light[1]
+          - Math.sqrt(1 - radiusSquared) * light[2];
+        if (sunlight > 0) lit += 1;
+      }
+    }
+
+    expect(state.moonIllumination).toBeGreaterThan(0.99);
+    expect(Math.abs(lit / inside - state.moonIllumination)).toBeLessThan(0.001);
+  });
+
+  it("preserves every phase across a lunar cycle", () => {
+    for (let day = 1; day <= 31; day += 1) {
+      const state = getCelestialState(
+        new Date(Date.UTC(2026, 9, day, 17)), LATITUDE, LONGITUDE,
+      );
+      const light = getMoonPhaseLight(state.sun, state.moon);
+
+      expect(vectorLength(light)).toBeCloseTo(1, 12);
+      expect((1 - light[2]) / 2).toBeCloseTo(state.moonIllumination, 12);
+    }
   });
 });
 
