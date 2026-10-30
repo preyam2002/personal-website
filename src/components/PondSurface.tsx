@@ -2490,6 +2490,9 @@ const JUMP_SCROLL_LIMIT = 0.1;
 const FEEDING_DISTANCE = 16;
 const MAX_DRAG_SPEED = 2.5;
 const BOAT_CONTACT_PIXELS = 28;
+const WAKE_RIPPLE_AMPLITUDE = 0.06;
+const WAKE_SPACING = 0.35;
+const WAKE_INTERVAL_SECONDS = 0.08;
 const MAX_LIFE_STEP_SECONDS = 0.1;
 const POINTER_MEMORY_SECONDS = 6;
 const LIFE_SUBSTEP_SECONDS = 1 / 30;
@@ -3676,6 +3679,7 @@ export default function PondSurface({
     const pellets: Pellet[] = [];
     let nextPelletId = 0;
     let pressedAt = -Infinity;
+    const wake = { point: null as Vector3 | null, time: 0 };
     // Probe results come back one frame later. The keys connect them to their objects.
     const probeSamples = new Map<string, ProbeSample>();
     const probeReadback = new Float32Array(PROBE_SLOTS * PROBE_ROWS * 4);
@@ -4073,6 +4077,13 @@ export default function PondSurface({
           const point = toWaterPoint(event.x, event.y);
           const previous = toWaterPoint(event.x - event.dx, event.y - event.dy);
           if (!point || !previous || event.seconds <= 0) continue;
+          // A drag leaves a wake: small ripples spaced along its path.
+          if (!wake.point || lifeTime - wake.time >= WAKE_INTERVAL_SECONDS
+            && Math.hypot(point[0] - wake.point[0], point[2] - wake.point[2]) >= WAKE_SPACING) {
+            ripples.add(point[0], point[2], WAKE_RIPPLE_AMPLITUDE, lifeTime);
+            wake.point = point;
+            wake.time = lifeTime;
+          }
           let velocityX = (point[0] - previous[0]) / event.seconds;
           let velocityZ = (point[2] - previous[2]) / event.seconds;
           const speed = Math.hypot(velocityX, velocityZ);
@@ -4115,6 +4126,7 @@ export default function PondSurface({
       !(event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR));
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || !isInteractive() || !isSceneTarget(event)) return;
+      wake.point = null;
       gestures.down(event.pointerId, event.clientX, event.clientY, event.timeStamp);
     };
     const onPointerMove = (event: PointerEvent) => {
