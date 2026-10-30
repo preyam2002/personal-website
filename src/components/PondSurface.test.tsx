@@ -22,6 +22,7 @@ describe("ocean first frame", () => {
   let scissor: jest.Mock;
   let drawMesh: jest.Mock;
   let viewport: jest.Mock;
+  let uniformMismatches: string[];
 
   beforeEach(() => {
     callbacks = new Map();
@@ -32,6 +33,8 @@ describe("ocean first frame", () => {
     scissor = jest.fn();
     drawMesh = jest.fn();
     viewport = jest.fn();
+    uniformMismatches = [];
+    let activeProgram: unknown = null;
     const gl = new Proxy({}, {
       get: (_target, name: string) => {
         if (name === "FRAMEBUFFER_COMPLETE") return 1;
@@ -43,9 +46,16 @@ describe("ocean first frame", () => {
         if (name === "scissor") return scissor;
         if (name === "drawElements") return drawMesh;
         if (name === "viewport") return viewport;
+        if (name === "useProgram") return (program: unknown) => { activeProgram = program; };
+        if (name === "getUniformLocation") return (program: unknown, uniform: string) => ({ program, uniform });
+        if (name.startsWith("uniform")) {
+          return (location: { program: unknown; uniform: string } | null) => {
+            if (location && location.program !== activeProgram) uniformMismatches.push(location.uniform);
+          };
+        }
         if (name === "getExtension") return () => ({});
         if (name === "checkFramebufferStatus") return () => 1;
-        if (name.startsWith("create") || name === "getUniformLocation") return () => ({});
+        if (name.startsWith("create")) return () => ({});
         return () => undefined;
       },
     });
@@ -126,5 +136,14 @@ describe("ocean first frame", () => {
     expect(bottom + height).toBeLessThan(canvas.height * 0.75);
     expect(height).toBeLessThan(canvas.height * 0.25);
     expect(viewport).toHaveBeenLastCalledWith(0, 0, canvas.width, canvas.height);
+  });
+
+  it.each(["full", "reduced", "low"])("sets every uniform on its own program in the %s profile", async quality => {
+    window.history.replaceState(null, "", `/water?ocean-quality=${quality}`);
+    await act(async () => { render(<PondSurface seed={42} />); });
+    await frame(16);
+    wait.mockReturnValue(3);
+    await frame(100);
+    expect(uniformMismatches).toEqual([]);
   });
 });
