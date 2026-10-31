@@ -165,7 +165,7 @@ const OCEAN_WAVE_HEIGHT_SCALE = 1.0;
 const WATER_DOMAIN_METERS = 32;
 const OCEAN_DEPTH_METERS = 24;
 const CELESTIAL_DISC_SCALE = 1.8;
-const GLOW_SURFACE_RADIANCE = "0.07";
+const GLOW_SURFACE_RADIANCE = "0.06";
 const DEFAULT_CELESTIAL_DATE = Date.UTC(2026, 5, 21, 6, 30);
 
 const FULL_QUALITY: QualityProfile = {
@@ -181,7 +181,7 @@ const FULL_QUALITY: QualityProfile = {
   fishCount: 36,
   fishJumps: true,
   frameInterval: 1_000 / 60,
-  glowSize: 192,
+  glowSize: 256,
   meshColumns: 384,
   meshRows: 640,
   pelletCount: PELLET_SLOTS,
@@ -205,7 +205,7 @@ const REDUCED_QUALITY: QualityProfile = {
   fishCount: 18,
   fishJumps: true,
   frameInterval: 1_000 / 30,
-  glowSize: 128,
+  glowSize: 160,
   meshColumns: 192,
   meshRows: 384,
   pelletCount: 6,
@@ -1807,6 +1807,8 @@ vec3 underwaterVolume(
   return accumulated * mix(12.0, 9.60, daylight) + ambient * 0.78;
 }
 
+${glowSampleShader}
+
 vec3 marineSnow(
   vec3 origin,
   vec3 ray,
@@ -1864,6 +1866,9 @@ vec3 marineSnow(
       + ambient * 2.4;
     total += illumination * speck * (0.35 + 0.65 * random.y)
       * (layer == 0 ? 0.45 : 0.7);
+    // At night some particles are plankton cells that flash blue-green.
+    total += glowRadiance(u_glowStrength) * speck * 0.018
+      * smoothstep(0.55, 0.9, random.x) * (0.5 + 0.5 * sin(u_lifeTime * 3.1 + random.y * 40.0));
   }
 
   return total;
@@ -1930,7 +1935,6 @@ vec3 sampleUnderwaterRay(vec3 origin, vec3 direction, int sampleCount) {
     + volumeRadiance * mix(1.0, 0.38, floorVisibility);
 }
 
-${glowSampleShader}
 ${lifeShader}
 ${lifeReflectionShader}
 
@@ -1997,7 +2001,8 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
     waterHighlightColor
   );
   // Bioluminescence shines from just below the surface, so the transmitted part reaches the eye.
-  color += glowRadiance(sampleGlow(g_surfaceParameter)) * glowSparkle(g_surfaceParameter)
+  color += glowRadiance(sampleGlow(g_surfaceParameter))
+    * glowSparkle(g_surfaceParameter, length(fwidth(g_surfaceParameter)))
     * ${GLOW_SURFACE_RADIANCE} * (1.0 - fresnel);
 
   vec2 foamUv = (g_surfaceParameter - vec2(${FOAM_ORIGIN.map(value => value.toFixed(1)).join(", ")}))
@@ -2297,6 +2302,7 @@ export type LifeFrame = {
   splashes: Float32Array;
   splashCount: number;
   seconds: number;
+  time: number;
 };
 
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
@@ -2953,6 +2959,7 @@ async function createPondEngine(
     sprayDroplets: getUniform(gl, displayProgram, "u_sprayDroplets"),
     glow: getUniform(gl, displayProgram, "u_glow"),
     glowStrength: getUniform(gl, displayProgram, "u_glowStrength"),
+    lifeTime: getUniform(gl, displayProgram, "u_lifeTime"),
     lifeLow: getUniform(gl, displayProgram, "u_lifeLow"),
     lifeHigh: getUniform(gl, displayProgram, "u_lifeHigh"),
     airLow: getUniform(gl, displayProgram, "u_airLow"),
@@ -3508,6 +3515,7 @@ async function createPondEngine(
     bindTexture(gl, actorTexture, 9);
     if (glowStrength > 0) bindTexture(gl, glowTargets[glowIndex].texture, 11);
     gl.uniform1f(displayUniforms.glowStrength, glowStrength);
+    gl.uniform1f(displayUniforms.lifeTime, life.time);
     gl.uniform1i(displayUniforms.fishCount, school.count);
     gl.uniform1i(displayUniforms.pelletCount, life.pelletCount);
     gl.uniform1i(displayUniforms.boatCount, life.boatCount);
@@ -3840,6 +3848,7 @@ export default function PondSurface({
       splashes: new Float32Array(SPLASH_SLOTS * 8),
       splashCount: 0,
       seconds: 0,
+      time: 0,
     };
     const lifeEvents: LifeEvent[] = [];
     const advanceLife = (seconds: number) => {
@@ -4076,6 +4085,7 @@ export default function PondSurface({
         }
       }
       if (reducedMotion || previewTime !== null) lifeFrame.seconds = 0;
+      lifeFrame.time = lifeTime;
       if (isInteractive()) handleGestures(gestures.poll(timestamp));
       else gestures.cancel();
       updateStimuli(timestamp);

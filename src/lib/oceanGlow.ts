@@ -43,15 +43,17 @@ ${rippleShader}
 void main() {
   vec2 point = vec2(${GLOW_ORIGIN.map(value => value.toFixed(1)).join(", ")}) + v_uv * ${GLOW_DOMAIN_METERS.toFixed(1)};
   float source = 0.0;
+  float texel = ${GLOW_DOMAIN_METERS.toFixed(1)} / float(textureSize(u_previous, 0).x);
   for (int index = 0; index < ${ACTOR_TEXTURE_WIDTH}; index += 1) {
     if (index >= u_fishCount) break;
     vec4 fish = texelFetch(u_actors, ivec2(index, 0), 0);
     vec2 offset = point - fish.xz;
-    float spread = 0.06 + 0.02 * max(-fish.y, 0.0);
+    // Light spreads with depth. A spot never falls below two texels, so the map shows no blocks.
+    float spread = max(0.18 + 0.05 * max(-fish.y, 0.0), 2.0 * texel);
     float swim = texelFetch(u_actors, ivec2(index, 2), 0).x;
-    source += exp(-dot(offset, offset) / spread - max(-fish.y, 0.0) * 1.4) * (0.3 + 12.0 * max(swim - 0.05, 0.0));
+    source += exp(-0.5 * dot(offset, offset) / (spread * spread) - max(-fish.y, 0.0) * 1.4)
+      * (0.3 + 12.0 * max(swim - 0.05, 0.0));
   }
-  float texel = ${GLOW_DOMAIN_METERS.toFixed(1)} / float(textureSize(u_previous, 0).x);
   source += length(rippleField(point, texel).yz) * 3.0;
   for (int splash = 0; splash < ${SPLASH_SLOTS}; splash += 1) {
     if (splash >= u_splashCount) break;
@@ -71,22 +73,53 @@ void main() {
 export const glowSampleShader = `
 uniform sampler2D u_glow;
 uniform float u_glowStrength;
+uniform float u_lifeTime;
+
+/** Cubic B-spline filter from four bilinear taps. Bilinear taps alone show the texel grid. */
+float sampleGlowMap(vec2 uv) {
+  vec2 size = vec2(textureSize(u_glow, 0));
+  vec2 pixel = uv * size - 0.5;
+  vec2 base = floor(pixel);
+  vec2 t = pixel - base;
+  vec2 t2 = t * t;
+  vec2 t3 = t2 * t;
+  vec2 w0 = (1.0 - 3.0 * t + 3.0 * t2 - t3) / 6.0;
+  vec2 w1 = (4.0 - 6.0 * t2 + 3.0 * t3) / 6.0;
+  vec2 w2 = (1.0 + 3.0 * t + 3.0 * t2 - 3.0 * t3) / 6.0;
+  vec2 w3 = t3 / 6.0;
+  vec2 g0 = w0 + w1;
+  vec2 g1 = w2 + w3;
+  vec2 lower = (base - 0.5 + w1 / g0) / size;
+  vec2 upper = (base + 1.5 + w3 / g1) / size;
+  return (texture(u_glow, lower).r * g0.x + texture(u_glow, vec2(upper.x, lower.y)).r * g1.x) * g0.y
+    + (texture(u_glow, vec2(lower.x, upper.y)).r * g0.x + texture(u_glow, upper).r * g1.x) * g1.y;
+}
 
 float sampleGlow(vec2 position) {
   if (u_glowStrength <= 0.0) return 0.0;
   vec2 uv = (position - vec2(${GLOW_ORIGIN.map(value => value.toFixed(1)).join(", ")})) / ${GLOW_DOMAIN_METERS.toFixed(1)};
   float edge = min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y));
   if (edge <= 0.0) return 0.0;
-  return texture(u_glow, uv).r * smoothstep(0.0, 0.05, edge) * u_glowStrength;
+  return sampleGlowMap(uv) * smoothstep(0.0, 0.05, edge) * u_glowStrength;
 }
 
 vec3 glowRadiance(float glow) {
   return vec3(${GLOW_COLOR.map(value => value.toFixed(3)).join(", ")}) * glow;
 }
 
-/** Break the surface glow into points of light, as single plankton cells flash. */
-float glowSparkle(vec2 position) {
-  float cells = noise21(position * 16.0);
-  return 0.25 + 2.2 * cells * cells * cells;
+/**
+ * Break the surface glow into points of light, as single plankton cells flash.
+ *
+ * The points drift and twinkle. Where one pixel covers several points, the
+ * pattern fades to its mean, so distant water shows no aliasing. The mean is one.
+ */
+float glowSparkle(vec2 position, float footprint) {
+  float detail = 1.0 - smoothstep(0.015, 0.06, footprint);
+  if (detail <= 0.0) return 1.0;
+  vec2 drift = vec2(u_lifeTime * 0.05, -u_lifeTime * 0.04);
+  float cells = noise21(position * 18.0 + drift);
+  float twinkle = 0.55 + 0.45 * sin(u_lifeTime * 2.3 + noise21(position * 5.0 - drift) * 18.0);
+  float sparkle = cells * cells * cells * twinkle * 7.5;
+  return mix(1.0, 0.35 + sparkle, detail);
 }
 `;
