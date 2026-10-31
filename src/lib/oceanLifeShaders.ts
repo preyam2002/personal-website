@@ -33,6 +33,16 @@ uniform vec3 u_airHigh;
 uniform vec3 u_boatLow;
 uniform vec3 u_boatHigh;
 
+// The width of the pixel cone at a travel distance along the current ray.
+float coneWidth(float travel) {
+  return max((g_coneOffset + travel) * g_pixelAngle, 0.0005);
+}
+
+// Turn the closest approach of a ray, in cone widths, into pixel coverage.
+float coneCoverage(float ratio) {
+  return clamp(1.0 - ratio, 0.0, 1.0);
+}
+
 bool rayBox(vec3 origin, vec3 direction, vec3 low, vec3 high, float limit) {
   if (any(greaterThan(low, high))) return false;
   vec3 safe = mix(direction, vec3(0.000001), lessThan(abs(direction), vec3(0.000001)));
@@ -93,10 +103,15 @@ bool nearFish(int index, vec3 origin, vec3 direction, float limit, float margin)
     && dot(center, center) - along * along < radius * radius;
 }
 
+/**
+ * Trace the fish. Each march keeps its closest approach in units of the pixel
+ * cone, and the coverage output turns an edge into partial cover.
+ */
 bool traceFish(vec3 origin, vec3 direction, float limit, bool airOnly,
-  out float hitDistance, out vec3 hitLocal, out int hitIndex) {
+  out float hitDistance, out vec3 hitLocal, out int hitIndex, out float hitCoverage) {
   hitDistance = limit;
   hitIndex = -1;
+  hitCoverage = 0.0;
   for (int index = 0; index < ${ACTOR_TEXTURE_WIDTH}; index += 1) {
     if (index >= u_fishCount) break;
     if (!nearFish(index, origin, direction, hitDistance, 0.0)) continue;
@@ -116,19 +131,26 @@ bool traceFish(vec3 origin, vec3 direction, float limit, bool airOnly,
     float exit = -halfChord + discriminant;
     float travel = max(-halfChord - discriminant, 0.0);
     if (exit <= 0.0 || travel * size >= hitDistance) continue;
+    float closest = 1e5;
+    float closestTravel = travel;
     for (int step = 0; step < 32; step += 1) {
       vec3 point = localOrigin + localDirection * travel;
       float distance = fishDistance(point, phase, style.x);
-      if (distance < 0.0015) {
-        if (travel * size < hitDistance) {
-          hitDistance = travel * size;
-          hitLocal = point;
-          hitIndex = index;
-        }
-        break;
+      float ratio = distance * size / coneWidth(travel * size);
+      if (ratio < closest) {
+        closest = ratio;
+        closestTravel = travel;
       }
+      if (ratio < 0.2) break;
       travel += max(distance * 0.85, 0.002);
       if (travel > exit || travel * size >= hitDistance) break;
+    }
+    float coverage = coneCoverage(closest);
+    if (coverage > 0.0 && closestTravel * size < hitDistance) {
+      hitDistance = closestTravel * size;
+      hitLocal = localOrigin + localDirection * closestTravel;
+      hitIndex = index;
+      hitCoverage = coverage;
     }
   }
   return hitIndex >= 0;
@@ -268,8 +290,10 @@ void boatFrame(int index, out vec3 origin, out float size, out vec3 right, out v
   origin = surface - up * (${BOAT_DRAFT.toFixed(3)} * size);
 }
 
-bool traceBoats(vec3 origin, vec3 direction, inout float hitDistance, out vec3 hitLocal, out int hitIndex) {
+bool traceBoats(vec3 origin, vec3 direction, inout float hitDistance, out vec3 hitLocal, out int hitIndex,
+  out float hitCoverage) {
   hitIndex = -1;
+  hitCoverage = 0.0;
   for (int index = 0; index < ${BOAT_SLOTS}; index += 1) {
     if (index >= u_boatCount) break;
     vec3 position, right, up, forward;
@@ -287,17 +311,26 @@ bool traceBoats(vec3 origin, vec3 direction, inout float hitDistance, out vec3 h
     float exit = -halfChord + discriminant;
     float travel = max(-halfChord - discriminant, 0.0);
     if (exit <= 0.0 || travel * size >= hitDistance) continue;
+    float closest = 1e5;
+    float closestTravel = travel;
     for (int step = 0; step < 40; step += 1) {
       vec3 point = localOrigin + localDirection * travel;
       float distance = boatDistance(point);
-      if (distance < 0.0012) {
-        hitDistance = travel * size;
-        hitLocal = point;
-        hitIndex = index;
-        break;
+      float ratio = distance * size / coneWidth(travel * size);
+      if (ratio < closest) {
+        closest = ratio;
+        closestTravel = travel;
       }
+      if (ratio < 0.2) break;
       travel += max(distance * 0.9, 0.0015);
       if (travel > exit || travel * size >= hitDistance) break;
+    }
+    float coverage = coneCoverage(closest);
+    if (coverage > 0.0 && closestTravel * size < hitDistance) {
+      hitDistance = closestTravel * size;
+      hitLocal = localOrigin + localDirection * closestTravel;
+      hitIndex = index;
+      hitCoverage = coverage;
     }
   }
   return hitIndex >= 0;
@@ -392,21 +425,29 @@ float splashFoam(vec2 position) {
   return clamp(foam, 0.0, 1.0);
 }
 
+/**
+ * Shade the nearest fish, boat, pellet, or spray droplet on a ray. Coverage
+ * is the part of the pixel that the object covers; the caller blends the
+ * scene behind it by the rest.
+ */
 bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
-  out float hitDistance, out vec3 radiance) {
+  out float hitDistance, out vec3 radiance, out float coverage) {
   vec3 local;
   int index;
   radiance = vec3(0.0);
   hitDistance = limit;
+  coverage = 0.0;
+  float fishCoverage = 0.0;
   bool inBox = inWater ? rayBox(origin, direction, u_lifeLow, u_lifeHigh, limit)
     : rayBox(origin, direction, u_airLow, u_airHigh, limit);
   bool fish = inBox && u_fishCount > 0
-    && traceFish(origin, direction, limit, !inWater, hitDistance, local, index);
+    && traceFish(origin, direction, limit, !inWater, hitDistance, local, index, fishCoverage);
   vec3 boatLocal;
   int boat = -1;
+  float boatCoverage = 0.0;
   // Only the 2 cm below the waterline of a boat is under water. The water path skips boats.
   if (!inWater && u_boatCount > 0 && rayBox(origin, direction, u_boatLow, u_boatHigh, hitDistance)
-    && traceBoats(origin, direction, hitDistance, boatLocal, boat)) {
+    && traceBoats(origin, direction, hitDistance, boatLocal, boat, boatCoverage)) {
     fish = false;
   }
   vec3 pelletNormal;
@@ -415,6 +456,7 @@ bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
     radiance = inWater
       ? fishRadianceInWater(origin + direction * hitDistance, pelletNormal, direction, food, 0.0)
       : fishRadianceInAir(pelletNormal, direction, food, 0.0);
+    coverage = 1.0;
     return true;
   }
   vec3 sprayNormal;
@@ -422,10 +464,12 @@ bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
     vec3 mirror = reflect(direction, sprayNormal);
     radiance = v_diffuseSkyRadiance * 1.1 + primaryLightRadiance()
       * (0.35 + 3.0 * pow(max(dot(mirror, u_primaryLightDirection), 0.0), 40.0));
+    coverage = 1.0;
     return true;
   }
   if (boat >= 0) {
     radiance = boatRadiance(origin + direction * hitDistance, boatLocal, boat, direction, inWater);
+    coverage = boatCoverage;
     return true;
   }
   if (!fish) return false;
@@ -445,6 +489,7 @@ bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
     float rim = 1.0 - abs(dot(normal, direction));
     radiance += glowRadiance(sampleGlow(point.xz)) * 0.25 * rim * rim;
   }
+  coverage = fishCoverage;
   return true;
 }
 
@@ -478,10 +523,16 @@ vec3 sampleRefractedScene(vec3 surfacePosition, vec3 incident, vec3 direction, i
     vec3 lifeDirection = refract(incident, calmNormal, 1.0 / WATER_IOR);
     float distance;
     vec3 radiance;
-    if (dot(lifeDirection, lifeDirection) > 0.000001
-      && shadeLife(origin, lifeDirection, 52.0, true, distance, radiance)) {
-      return radiance * exp(-waterExtinctionCoefficient() * distance)
+    float coverage;
+    g_coneOffset = length(surfacePosition - v_cameraOrigin);
+    bool hit = dot(lifeDirection, lifeDirection) > 0.000001
+      && shadeLife(origin, lifeDirection, 52.0, true, distance, radiance, coverage);
+    g_coneOffset = 0.0;
+    if (hit) {
+      vec3 front = radiance * exp(-waterExtinctionCoefficient() * distance)
         + underwaterVolume(origin, direction, distance, sampleCount);
+      if (coverage > 0.999) return front;
+      return mix(sampleUnderwaterRay(origin, direction, sampleCount), front, coverage);
     }
   }
   return sampleUnderwaterRay(origin, direction, sampleCount);
@@ -494,7 +545,10 @@ vec3 reflectLife(vec3 surfacePosition, vec3 direction, vec3 sky) {
   if (direction.y <= 0.0) return sky;
   float distance;
   vec3 radiance;
-  if (shadeLife(surfacePosition + direction * 0.01, direction, 40.0, false, distance, radiance)) return radiance;
-  return sky;
+  float coverage;
+  g_coneOffset = length(surfacePosition - v_cameraOrigin);
+  bool hit = shadeLife(surfacePosition + direction * 0.01, direction, 40.0, false, distance, radiance, coverage);
+  g_coneOffset = 0.0;
+  return hit ? mix(sky, radiance, coverage) : sky;
 }
 `;

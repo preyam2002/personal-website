@@ -71,18 +71,6 @@ vec3 underwaterSkylight(float depth) {
   return v_diffuseSkyRadiance * 0.92 * exp(-waterExtinctionCoefficient() * depth);
 }
 
-// ---- Soft edges ----
-
-// The width of the pixel cone at a travel distance along the current ray.
-float coneWidth(float travel) {
-  return max((g_coneOffset + travel) * g_pixelAngle, 0.0005);
-}
-
-// Turn the closest approach of a ray, in cone widths, into pixel coverage.
-float coneCoverage(float ratio) {
-  return clamp(1.0 - ratio, 0.0, 1.0);
-}
-
 // ---- Kelp ----
 
 vec4 kelpStalk(int index) {
@@ -157,7 +145,9 @@ vec3 kelpRadiance(vec3 point, vec3 normal, vec3 direction, vec4 stalk, float par
     : vec3(0.32, 0.24, 0.09);
   float occlusion = mix(0.45, 1.0, smoothstep(0.0, 3.0, height));
   vec3 sun = primaryLightRadiance() * exp(-extinction * depth / max(-light.y, 0.0001)) * causticGain(point);
-  vec3 radiance = fishRadianceInWater(point, normal, direction, albedo, part > 1.5 ? 0.2 : 0.04) * occlusion;
+  // Deep water still holds blue light from every side. It keeps deep kelp from going black.
+  vec3 radiance = (fishRadianceInWater(point, normal, direction, albedo, part > 1.5 ? 0.2 : 0.04)
+    + albedo * waterAmbientRadiance() * 2.5) * occlusion;
   if (part > 0.5 && part < 1.5) {
     // Light through the blade: strong toward the sun, softer from the bright surface above.
     float towardSun = pow(max(dot(direction, -light), 0.0), 4.0);

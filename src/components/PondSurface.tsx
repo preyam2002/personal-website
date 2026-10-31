@@ -1964,10 +1964,10 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
   bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
   float lifeDistance;
   vec3 lifeRadiance;
-  if (shadeLife(origin, ray, surfaceHit ? distanceToSurface : 200.0, false, lifeDistance, lifeRadiance)) {
-    return lifeRadiance;
-  }
-  if (!surfaceHit) return atmosphere(ray, 1.0, 1.0, 0.0);
+  float lifeCoverage;
+  shadeLife(origin, ray, surfaceHit ? distanceToSurface : 200.0, false, lifeDistance, lifeRadiance, lifeCoverage);
+  if (lifeCoverage > 0.999) return lifeRadiance;
+  if (!surfaceHit) return mix(atmosphere(ray, 1.0, 1.0, 0.0), lifeRadiance, lifeCoverage);
 
   float horizonDetail = smoothstep(0.006, 0.07, -ray.y);
   vec3 opticalNormal;
@@ -2067,23 +2067,13 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
   vec3 horizonSky = skyBackground(horizonDirection, skyLut(horizonDirection));
   float distanceHaze = 1.0 - exp(-distanceToSurface / 2200.0);
   float horizonHaze = (1.0 - smoothstep(0.0, 0.020, -ray.y)) * 0.9;
-  return mix(color, horizonSky, max(distanceHaze, horizonHaze));
+  return mix(mix(color, horizonSky, max(distanceHaze, horizonHaze)), lifeRadiance, lifeCoverage);
 }
 
-vec3 renderBelowWaterSurface(vec3 origin, vec3 ray) {
+// The underwater view of the surface, the water column, and the seabed, without life.
+vec3 renderBelowWaterBackground(vec3 origin, vec3 ray, bool surfaceHit, float distanceToSurface,
+  vec3 surfacePosition) {
   vec3 extinction = waterExtinctionCoefficient();
-  float distanceToSurface;
-  vec3 surfacePosition;
-  bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
-  float lifeDistance;
-  vec3 lifeRadiance;
-  g_frontDistance = surfaceHit ? distanceToSurface : 52.0;
-  if (ray.y < -0.0001) g_frontDistance = min(g_frontDistance, (-u_floorDepth - origin.y) / ray.y);
-  if (shadeLife(origin, ray, surfaceHit ? distanceToSurface : 52.0, true, lifeDistance, lifeRadiance)) {
-    g_frontDistance = lifeDistance;
-    return lifeRadiance * exp(-extinction * lifeDistance)
-      + underwaterVolume(origin, ray, lifeDistance, g_crossing ? 2 : 3);
-  }
   if (!surfaceHit) return sampleUnderwaterRay(origin, ray, g_crossing ? 3 : 6);
 
   float roughFootprint = mix(
@@ -2170,6 +2160,27 @@ vec3 renderBelowWaterSurface(vec3 origin, vec3 ray) {
     );
   }
   return resolvedSurface;
+}
+
+vec3 renderBelowWaterSurface(vec3 origin, vec3 ray) {
+  vec3 extinction = waterExtinctionCoefficient();
+  float distanceToSurface;
+  vec3 surfacePosition;
+  bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
+  float lifeDistance;
+  vec3 lifeRadiance;
+  float lifeCoverage;
+  g_frontDistance = surfaceHit ? distanceToSurface : 52.0;
+  if (ray.y < -0.0001) g_frontDistance = min(g_frontDistance, (-u_floorDepth - origin.y) / ray.y);
+  vec3 front = vec3(0.0);
+  if (shadeLife(origin, ray, surfaceHit ? distanceToSurface : 52.0, true, lifeDistance, lifeRadiance, lifeCoverage)) {
+    front = lifeRadiance * exp(-extinction * lifeDistance)
+      + underwaterVolume(origin, ray, lifeDistance, g_crossing ? 2 : 3);
+    if (lifeCoverage > 0.5) g_frontDistance = lifeDistance;
+    if (lifeCoverage > 0.999) return front;
+  }
+  vec3 background = renderBelowWaterBackground(origin, ray, surfaceHit, distanceToSurface, surfacePosition);
+  return mix(background, front, lifeCoverage);
 }
 
 vec3 renderBelowWater(
