@@ -1,7 +1,5 @@
 import { BOAT_BOUND_RADIUS, BOAT_DRAFT, BOAT_SLOTS } from "./oceanBoats";
 import {
-  ACTOR_TEXTURE_WIDTH,
-  FISH_BOUND_RADIUS,
   PELLET_SLOTS,
   SPLASH_LIFETIME_SECONDS,
   SPLASH_SLOTS,
@@ -10,16 +8,14 @@ import {
 } from "./oceanLife";
 
 /**
- * Ray-marched fish for the display shader.
+ * Fish, boats, pellets, and spray for the display shader.
  *
- * The display shader includes this code after its water helpers. Each fish is
- * a signed distance field in a local frame where the length is one and the
- * nose points along +z. The tail bends with a traveling wave. A box test on
- * the whole school rejects most pixels before the per-fish sphere tests.
+ * The display shader includes this code after its water helpers. Boats,
+ * pellets, and spray are distance fields or spheres. The fish come from a
+ * separate mesh pass and only need shading and optics here.
  */
 export const lifeShader = `
 uniform highp sampler2D u_actors;
-uniform highp int u_fishCount;
 uniform highp int u_pelletCount;
 uniform highp int u_boatCount;
 uniform highp sampler2D u_probeSurface;
@@ -56,136 +52,49 @@ bool rayBox(vec3 origin, vec3 direction, vec3 low, vec3 high, float limit) {
   return entry <= exit && entry < limit;
 }
 
-float fishTaper(float z) {
-  return mix(1.0, 0.22, smoothstep(0.18, -0.48, z));
+// ---- Fish ----
+// The fish are a scanned mesh, drawn by their own pass into a buffer that holds
+// the covered part of each pixel, the albedo, the normal, the point, and the
+// optical path. Values are multiplied by coverage, so edges stay soft.
+
+uniform sampler2D u_fishAlbedo;
+uniform sampler2D u_fishNormal;
+uniform sampler2D u_fishPoint;
+uniform float u_fishReady;
+
+struct FishSample {
+  float coverage;
+  vec3 albedo;
+  vec3 normal;
+  float roughness;
+  vec3 point;
+  float path;
+};
+
+FishSample sampleFish(vec2 uv) {
+  FishSample fish = FishSample(0.0, vec3(0.0), vec3(0.0, 1.0, 0.0), 1.0, vec3(0.0), 1e5);
+  if (u_fishReady < 0.5) return fish;
+  vec4 albedo = texture(u_fishAlbedo, uv);
+  if (albedo.a < 0.01) return fish;
+  float inverse = 1.0 / albedo.a;
+  vec4 normal = texture(u_fishNormal, uv);
+  vec4 point = texture(u_fishPoint, uv);
+  fish.coverage = min(albedo.a, 1.0);
+  fish.albedo = albedo.rgb * inverse;
+  fish.normal = normalize(normal.xyz + vec3(0.0, 0.00001, 0.0));
+  fish.roughness = normal.w * inverse;
+  fish.point = point.xyz * inverse;
+  fish.path = point.w * inverse;
+  return fish;
 }
 
-float fishDistance(vec3 p, float phase, float swim) {
-  float behind = clamp(0.32 - p.z, 0.0, 1.0);
-  p.x -= sin(phase - p.z * 6.5) * swim * behind * behind;
-  float taper = fishTaper(p.z);
-  vec3 radii = vec3(0.07 * taper, 0.115 * taper, 0.5);
-  float k0 = length(p / radii);
-  float k1 = length(p / (radii * radii));
-  float body = k0 * (k0 - 1.0) / max(k1, 0.00001);
-  float root = -0.43 - p.z;
-  float span = 0.02 + max(root, 0.0) * 1.05;
-  float notch = (root - 0.08) * 1.4;
-  float tail = max(max(abs(p.x) - 0.005, max(-root, root - 0.17)),
-    max(abs(p.y) - span, notch - abs(p.y)));
-  float ridge = p.y - 0.085;
-  float along = abs(p.z + 0.03);
-  float dorsal = max(max(abs(p.x) - 0.004, -ridge), max(ridge - (0.06 - along * 0.6), along - 0.1));
-  return min(body, min(tail, dorsal));
-}
-
-void fishFrame(int index, out vec3 position, out float size, out vec3 right, out vec3 up,
-  out vec3 forward, out float phase, out vec4 style) {
-  vec4 placement = texelFetch(u_actors, ivec2(index, 0), 0);
-  vec4 heading = texelFetch(u_actors, ivec2(index, 1), 0);
-  style = texelFetch(u_actors, ivec2(index, 2), 0);
-  position = placement.xyz;
-  size = placement.w;
-  forward = heading.xyz;
-  phase = heading.w;
-  vec2 level = forward.xz;
-  right = length(level) > 0.0001 ? normalize(vec3(level.y, 0.0, -level.x)) : vec3(1.0, 0.0, 0.0);
-  up = cross(forward, right);
-}
-
-/** Test the bounding sphere of one fish with one texel fetch. */
-bool nearFish(int index, vec3 origin, vec3 direction, float limit, float margin) {
-  vec4 placement = texelFetch(u_actors, ivec2(index, 0), 0);
-  vec3 center = placement.xyz - origin;
-  float along = dot(center, direction);
-  float radius = placement.w * ${FISH_BOUND_RADIUS.toFixed(2)} + margin;
-  return along > -radius && along - radius < limit
-    && dot(center, center) - along * along < radius * radius;
-}
-
-/**
- * Trace the fish. Each march keeps its closest approach in units of the pixel
- * cone, and the coverage output turns an edge into partial cover.
- */
-bool traceFish(vec3 origin, vec3 direction, float limit, bool airOnly,
-  out float hitDistance, out vec3 hitLocal, out int hitIndex, out float hitCoverage) {
-  hitDistance = limit;
-  hitIndex = -1;
-  hitCoverage = 0.0;
-  for (int index = 0; index < ${ACTOR_TEXTURE_WIDTH}; index += 1) {
-    if (index >= u_fishCount) break;
-    if (!nearFish(index, origin, direction, hitDistance, 0.0)) continue;
-    if (airOnly && texelFetch(u_actors, ivec2(index, 2), 0).z < 0.5) continue;
-    vec3 position, right, up, forward;
-    float size, phase;
-    vec4 style;
-    fishFrame(index, position, size, right, up, forward, phase, style);
-    vec3 relative = (origin - position) / size;
-    vec3 localOrigin = vec3(dot(relative, right), dot(relative, up), dot(relative, forward));
-    vec3 localDirection = vec3(dot(direction, right), dot(direction, up), dot(direction, forward));
-    float halfChord = dot(localOrigin, localDirection);
-    float offset = dot(localOrigin, localOrigin) - ${(FISH_BOUND_RADIUS * FISH_BOUND_RADIUS).toFixed(4)};
-    float discriminant = halfChord * halfChord - offset;
-    if (discriminant < 0.0) continue;
-    discriminant = sqrt(discriminant);
-    float exit = -halfChord + discriminant;
-    float travel = max(-halfChord - discriminant, 0.0);
-    if (exit <= 0.0 || travel * size >= hitDistance) continue;
-    float closest = 1e5;
-    float closestTravel = travel;
-    for (int step = 0; step < 32; step += 1) {
-      vec3 point = localOrigin + localDirection * travel;
-      float distance = fishDistance(point, phase, style.x);
-      float ratio = distance * size / coneWidth(travel * size);
-      if (ratio < closest) {
-        closest = ratio;
-        closestTravel = travel;
-      }
-      if (ratio < 0.2) break;
-      travel += max(distance * 0.85, 0.002);
-      if (travel > exit || travel * size >= hitDistance) break;
-    }
-    float coverage = coneCoverage(closest);
-    if (coverage > 0.0 && closestTravel * size < hitDistance) {
-      hitDistance = closestTravel * size;
-      hitLocal = localOrigin + localDirection * closestTravel;
-      hitIndex = index;
-      hitCoverage = coverage;
-    }
-  }
-  return hitIndex >= 0;
-}
-
-vec3 fishNormal(vec3 local, float phase, float swim, vec3 right, vec3 up, vec3 forward) {
-  const vec2 offset = vec2(0.0025, -0.0025);
-  vec3 gradient = offset.xyy * fishDistance(local + offset.xyy, phase, swim)
-    + offset.yyx * fishDistance(local + offset.yyx, phase, swim)
-    + offset.yxy * fishDistance(local + offset.yxy, phase, swim)
-    + offset.xxx * fishDistance(local + offset.xxx, phase, swim);
-  return normalize(right * gradient.x + up * gradient.y + forward * gradient.z);
-}
-
-vec3 fishAlbedo(vec3 local, float variant, out float silver) {
-  float body = 0.115 * fishTaper(local.z);
-  float height = local.y / body;
-  vec3 back = mix(vec3(0.20, 0.17, 0.07), vec3(0.15, 0.17, 0.09), variant);
-  float bars = smoothstep(0.35, 0.9,
-    0.5 + 0.5 * sin(local.z * 48.0 + sin(local.z * 17.0 + variant * 6.0) * 1.2));
-  vec3 flank = vec3(0.66, 0.58, 0.36);
-  vec3 color = mix(flank, mix(back, back * 0.55, bars), smoothstep(0.1, 0.7, height));
-  color = mix(color, vec3(0.80, 0.78, 0.70), smoothstep(-0.2, -0.75, height));
-  silver = 0.6 * (1.0 - smoothstep(0.2, 0.8, height));
-  bool fin = local.z < -0.43 || abs(height) > 1.02;
-  if (fin) {
-    color = vec3(0.42, 0.34, 0.14);
-    silver = 0.05;
-  }
-  float eye = length(vec3(abs(local.x) - 0.045, local.y - 0.022, local.z - 0.36));
-  if (eye < 0.03) {
-    color = eye < 0.019 ? vec3(0.008) : vec3(0.62, 0.52, 0.30);
-    silver = 0.2;
-  }
-  return color * mix(0.88, 1.12, variant);
+// Return the display texture coordinate of a scene point.
+vec2 screenUv(vec3 point) {
+  vec3 relative = point - v_cameraOrigin;
+  float depth = max(dot(relative, v_cameraForward), 0.0001);
+  float aspect = u_surfaceResolution.x / max(u_surfaceResolution.y, 1.0);
+  vec2 screen = vec2(dot(relative, v_cameraRight), dot(relative, v_cameraUp)) * v_cameraFocalLength / depth;
+  return vec2(screen.x / aspect, screen.y) * 0.5 + 0.5;
 }
 
 /**
@@ -230,6 +139,21 @@ vec3 fishRadianceInAir(vec3 normal, vec3 direction, vec3 albedo, float silver) {
   environment += sun * pow(max(dot(mirror, light), 0.0), 220.0) * 18.0;
   float facing = 1.0 - abs(dot(normal, direction));
   return mix(diffuse, environment, clamp(0.12 + 0.6 * pow(facing, 4.0) + silver * 0.3, 0.0, 1.0));
+}
+
+vec3 shadeFishSample(FishSample fish, vec3 direction, bool inWater) {
+  // Wet scales reflect like polished silver where the roughness map is low.
+  float silver = 0.7 * (1.0 - fish.roughness);
+  vec3 normal = dot(fish.normal, direction) > 0.0 ? -fish.normal : fish.normal;
+  vec3 radiance = inWater
+    ? fishRadianceInWater(fish.point, normal, direction, fish.albedo, silver)
+    : fishRadianceInAir(normal, direction, fish.albedo, silver);
+  if (inWater) {
+    // At night the plankton light around a fish outlines its body.
+    float rim = 1.0 - abs(dot(normal, direction));
+    radiance += glowRadiance(sampleGlow(fish.point.xz)) * 0.25 * rim * rim;
+  }
+  return radiance;
 }
 
 /** Test the pellet spheres. A negative radius marks a pellet that floats at the surface. */
@@ -426,29 +350,23 @@ float splashFoam(vec2 position) {
 }
 
 /**
- * Shade the nearest fish, boat, pellet, or spray droplet on a ray. Coverage
+ * Shade the nearest boat, pellet, or spray droplet on a ray. The fish have their own pass. Coverage
  * is the part of the pixel that the object covers; the caller blends the
  * scene behind it by the rest.
  */
 bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
   out float hitDistance, out vec3 radiance, out float coverage) {
-  vec3 local;
-  int index;
   radiance = vec3(0.0);
   hitDistance = limit;
   coverage = 0.0;
-  float fishCoverage = 0.0;
   bool inBox = inWater ? rayBox(origin, direction, u_lifeLow, u_lifeHigh, limit)
     : rayBox(origin, direction, u_airLow, u_airHigh, limit);
-  bool fish = inBox && u_fishCount > 0
-    && traceFish(origin, direction, limit, !inWater, hitDistance, local, index, fishCoverage);
   vec3 boatLocal;
   int boat = -1;
   float boatCoverage = 0.0;
   // Only the 2 cm below the waterline of a boat is under water. The water path skips boats.
   if (!inWater && u_boatCount > 0 && rayBox(origin, direction, u_boatLow, u_boatHigh, hitDistance)
     && traceBoats(origin, direction, hitDistance, boatLocal, boat, boatCoverage)) {
-    fish = false;
   }
   vec3 pelletNormal;
   if (inBox && u_pelletCount > 0 && tracePellets(origin, direction, !inWater, hitDistance, pelletNormal)) {
@@ -472,25 +390,7 @@ bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
     coverage = boatCoverage;
     return true;
   }
-  if (!fish) return false;
-  vec3 position, right, up, forward;
-  float size, phase;
-  vec4 style;
-  fishFrame(index, position, size, right, up, forward, phase, style);
-  vec3 normal = fishNormal(local, phase, style.x, right, up, forward);
-  float silver;
-  vec3 albedo = fishAlbedo(local, style.y, silver);
-  vec3 point = origin + direction * hitDistance;
-  radiance = inWater
-    ? fishRadianceInWater(point, normal, direction, albedo, silver)
-    : fishRadianceInAir(normal, direction, albedo, silver);
-  // At night the plankton light around a fish outlines its body.
-  if (inWater) {
-    float rim = 1.0 - abs(dot(normal, direction));
-    radiance += glowRadiance(sampleGlow(point.xz)) * 0.25 * rim * rim;
-  }
-  coverage = fishCoverage;
-  return true;
+  return false;
 }
 
 /**
@@ -502,13 +402,10 @@ bool shadeLife(vec3 origin, vec3 direction, float limit, bool inWater,
  */
 vec3 sampleRefractedScene(vec3 surfacePosition, vec3 incident, vec3 direction, int sampleCount) {
   vec3 origin = surfacePosition + direction * 0.025;
+  vec3 extinction = waterExtinctionCoefficient();
   bool near = false;
   if (rayBox(origin, direction, u_lifeLow - 0.6, u_lifeHigh + 0.6, 52.0)) {
-    // The filtered normal costs many texture reads. Compute it only near a fish or a pellet.
-    for (int index = 0; index < ${ACTOR_TEXTURE_WIDTH}; index += 1) {
-      if (index >= u_fishCount || near) break;
-      near = nearFish(index, origin, direction, 52.0, 0.6);
-    }
+    // The filtered normal costs many texture reads. Compute it only near a pellet.
     for (int index = 0; index < ${PELLET_SLOTS}; index += 1) {
       if (index >= u_pelletCount || near) break;
       vec4 pellet = texelFetch(u_actors, ivec2(index, 3), 0);
@@ -529,10 +426,30 @@ vec3 sampleRefractedScene(vec3 surfacePosition, vec3 incident, vec3 direction, i
       && shadeLife(origin, lifeDirection, 52.0, true, distance, radiance, coverage);
     g_coneOffset = 0.0;
     if (hit) {
-      vec3 front = radiance * exp(-waterExtinctionCoefficient() * distance)
+      vec3 front = radiance * exp(-extinction * distance)
         + underwaterVolume(origin, direction, distance, sampleCount);
       if (coverage > 0.999) return front;
       return mix(sampleUnderwaterRay(origin, direction, sampleCount), front, coverage);
+    }
+  }
+  // The fish pass refracts each vertex through a flat surface. The waves then
+  // shift the image by the difference between the wavy and the flat refraction,
+  // over the path in the water. The wave normal is filtered over 0.3 m.
+  FishSample fish = sampleFish(v_uv);
+  if (fish.coverage > 0.0 && fish.point.y < 0.05) {
+    float surfaceDistance = length(surfacePosition - v_cameraOrigin);
+    vec3 flatDirection = refract(incident, vec3(0.0, 1.0, 0.0), 1.0 / WATER_IOR);
+    vec3 bentDirection = refract(incident, surfaceNormal(g_surfaceParameter, 0.3), 1.0 / WATER_IOR);
+    if (dot(bentDirection, bentDirection) > 0.000001) {
+      vec3 shift = (bentDirection - flatDirection) * max(fish.path - surfaceDistance, 0.0);
+      fish = sampleFish(screenUv(v_cameraOrigin + incident * fish.path + shift));
+      if (fish.coverage > 0.0 && fish.point.y < 0.05) {
+        float travel = max(fish.path - surfaceDistance, 0.0);
+        vec3 front = shadeFishSample(fish, bentDirection, true) * exp(-extinction * travel)
+          + underwaterVolume(origin, direction, travel, sampleCount);
+        if (fish.coverage > 0.999) return front;
+        return mix(sampleUnderwaterRay(origin, direction, sampleCount), front, fish.coverage);
+      }
     }
   }
   return sampleUnderwaterRay(origin, direction, sampleCount);

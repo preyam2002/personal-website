@@ -18,6 +18,7 @@ const programs = {
   foam: ["fullscreenVertexShader", "foamFragmentShader"],
   probe: ["fullscreenVertexShader", "probeFragmentShader"],
   glow: ["fullscreenVertexShader", "glowFragmentShader"],
+  fish: ["fishVertexShader", "fishFragmentShader"],
   surface: ["surfaceVertexShader", "surfaceFragmentShader"],
   caustic: ["causticVertexShader", "causticFragmentShader"],
   causticBlur: ["fullscreenVertexShader", "causticBlurFragmentShader"],

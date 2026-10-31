@@ -54,6 +54,12 @@ import {
   type SchoolStimulus,
 } from "@/lib/oceanLife";
 import { lifeReflectionShader, lifeShader } from "@/lib/oceanLifeShaders";
+import {
+  FISH_VERTEX_FLOATS,
+  fishRefractionShader,
+  loadFishModel,
+  type FishModel,
+} from "@/lib/oceanFishModel";
 import { glowFragmentShader, glowSampleShader, nightGlowStrength } from "@/lib/oceanGlow";
 import {
   BURST_LIFETIME_SECONDS,
@@ -741,6 +747,98 @@ void main() {
   } else {
     outColor = vec4(surfaceNormal(parameter, probe.w), 1.0);
   }
+}
+`;
+
+/**
+ * Draw the scanned fish mesh, one instance per fish.
+ *
+ * The vertex shader bends the body with the same traveling wave as the swim
+ * simulation, places it from the actor texture, and moves each vertex under the
+ * water to where it appears through a flat surface. The display shader adds
+ * the wave distortion and all light and water optics.
+ */
+const fishVertexShader = `#version 300 es
+precision highp float;
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_uv;
+layout(location = 3) in vec4 a_tangent;
+uniform highp sampler2D u_actors;
+uniform float u_scroll;
+uniform float u_seed;
+uniform vec2 u_resolution;
+out vec2 v_uv;
+out vec3 v_normal;
+out vec4 v_tangent;
+out vec3 v_point;
+out float v_path;
+${glslCamera}
+${fishRefractionShader}
+void main() {
+  vec4 placement = texelFetch(u_actors, ivec2(gl_InstanceID, 0), 0);
+  vec4 heading = texelFetch(u_actors, ivec2(gl_InstanceID, 1), 0);
+  float swim = texelFetch(u_actors, ivec2(gl_InstanceID, 2), 0).x;
+  vec3 local = a_position;
+  float behind = clamp(0.32 - local.z, 0.0, 1.0);
+  float wave = heading.w - local.z * 6.5;
+  // The derivative of the bend along the body turns the normal and tangent.
+  float slope = swim * (-6.5 * cos(wave) * behind * behind - (local.z < 0.32 ? 2.0 * behind * sin(wave) : 0.0));
+  local.x += sin(wave) * swim * behind * behind;
+  vec3 localNormal = normalize(vec3(a_normal.x, a_normal.y, a_normal.z - a_normal.x * slope));
+  vec3 localTangent = normalize(vec3(a_tangent.x, a_tangent.y, a_tangent.z - a_tangent.x * slope));
+  vec3 fishForward = heading.xyz;
+  vec3 fishRight = length(fishForward.xz) > 0.0001
+    ? normalize(vec3(fishForward.z, 0.0, -fishForward.x)) : vec3(1.0, 0.0, 0.0);
+  mat3 basis = mat3(fishRight, cross(fishForward, fishRight), fishForward);
+  vec3 point = placement.xyz + basis * local * placement.w;
+  v_uv = a_uv;
+  v_normal = basis * localNormal;
+  v_tangent = vec4(basis * localTangent, a_tangent.w);
+  v_point = point;
+  vec3 origin, forward, right, up;
+  float focalLength;
+  oceanCamera(origin, forward, right, up, focalLength);
+  v_path = length(point - origin);
+  vec3 apparent = point;
+  if (origin.y > 0.05 && point.y < 0.0) apparent = apparentUnderwaterPoint(origin, point, v_path);
+  vec3 relative = apparent - origin;
+  float depth = dot(relative, forward);
+  float near = 0.05;
+  float far = 400.0;
+  gl_Position = vec4(
+    dot(relative, right) * focalLength * u_resolution.y / u_resolution.x,
+    dot(relative, up) * focalLength,
+    (far + near) / (far - near) * depth - 2.0 * far * near / (far - near),
+    depth
+  );
+}
+`;
+
+const fishFragmentShader = `#version 300 es
+precision highp float;
+uniform sampler2D u_fishColor;
+uniform sampler2D u_fishNormalMap;
+uniform sampler2D u_fishMaterial;
+in vec2 v_uv;
+in vec3 v_normal;
+in vec4 v_tangent;
+in vec3 v_point;
+in float v_path;
+layout(location = 0) out vec4 outAlbedo;
+layout(location = 1) out vec4 outNormal;
+layout(location = 2) out vec4 outPoint;
+void main() {
+  vec3 normal = normalize(v_normal);
+  vec3 tangent = normalize(v_tangent.xyz - normal * dot(normal, v_tangent.xyz));
+  vec3 bitangent = cross(normal, tangent) * v_tangent.w;
+  vec3 mapped = texture(u_fishNormalMap, v_uv).xyz * 2.0 - 1.0;
+  // The material map holds occlusion, roughness, and metalness.
+  vec3 material = texture(u_fishMaterial, v_uv).rgb;
+  vec3 albedo = pow(texture(u_fishColor, v_uv).rgb, vec3(2.2));
+  outAlbedo = vec4(albedo * material.r, 1.0);
+  outNormal = vec4(normalize(tangent * mapped.x + bitangent * mapped.y + normal * mapped.z), material.g);
+  outPoint = vec4(v_point, v_path);
 }
 `;
 
@@ -1958,7 +2056,7 @@ ${lifeShader}
 ${lifeReflectionShader}
 ${sceneryShader}
 
-vec3 renderAboveWater(vec3 origin, vec3 ray) {
+vec3 renderAboveWaterScene(vec3 origin, vec3 ray) {
   float distanceToSurface;
   vec3 surfacePosition;
   bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
@@ -2021,9 +2119,12 @@ vec3 renderAboveWater(vec3 origin, vec3 ray) {
     waterHighlightColor
   );
   // Bioluminescence shines from just below the surface, so the transmitted part reaches the eye.
-  color += glowRadiance(sampleGlow(g_surfaceParameter))
-    * glowSparkle(g_surfaceParameter, length(fwidth(g_surfaceParameter)))
-    * ${GLOW_SURFACE_RADIANCE} * (1.0 - fresnel);
+  float glow = sampleGlow(g_surfaceParameter);
+  float glowFootprint = length(fwidth(g_surfaceParameter));
+  if (glow > 0.001) {
+    color += glowRadiance(glow) * glowSparkle(g_surfaceParameter, glowFootprint, glow)
+      * ${GLOW_SURFACE_RADIANCE} * (1.0 - fresnel);
+  }
 
   vec2 foamUv = (g_surfaceParameter - vec2(${FOAM_ORIGIN.map(value => value.toFixed(1)).join(", ")}))
     / ${FOAM_DOMAIN_METERS.toFixed(1)};
@@ -2183,6 +2284,16 @@ vec3 renderBelowWaterSurface(vec3 origin, vec3 ray) {
   return mix(background, front, lifeCoverage);
 }
 
+// A fish part above the surface, for example during a jump, covers the scene directly.
+vec3 renderAboveWater(vec3 origin, vec3 ray) {
+  vec3 color = renderAboveWaterScene(origin, ray);
+  FishSample fish = sampleFish(v_uv);
+  if (fish.coverage > 0.0 && fish.point.y >= 0.05) {
+    color = mix(color, shadeFishSample(fish, ray, false), fish.coverage);
+  }
+  return color;
+}
+
 vec3 renderBelowWater(
   vec3 origin,
   vec3 ray,
@@ -2191,6 +2302,13 @@ vec3 renderBelowWater(
   vec3 up
 ) {
   vec3 color = renderBelowWaterSurface(origin, ray);
+  FishSample fish = sampleFish(v_uv);
+  if (fish.coverage > 0.0 && fish.path < g_frontDistance) {
+    vec3 front = shadeFishSample(fish, ray, true) * exp(-waterExtinctionCoefficient() * fish.path)
+      + underwaterVolume(origin, ray, fish.path, 2);
+    color = mix(color, front, fish.coverage);
+    if (fish.coverage > 0.5) g_frontDistance = fish.path;
+  }
   SceneryHit scenery;
   if (traceScenery(origin, ray, g_frontDistance, scenery)) {
     vec3 front = scenery.radiance * exp(-waterExtinctionCoefficient() * scenery.distance)
@@ -2347,6 +2465,47 @@ export type LifeFrame = {
   bursts: Float32Array;
   burstCount: number;
 };
+
+type FishTarget = {
+  width: number;
+  height: number;
+  multisample: WebGLFramebuffer;
+  renderbuffers: WebGLRenderbuffer[];
+  resolves: WebGLFramebuffer[];
+  textures: WebGLTexture[];
+};
+
+function uploadFishModel(gl: WebGL2RenderingContext, model: FishModel) {
+  const vertexArray = gl.createVertexArray();
+  const vertexBuffer = gl.createBuffer();
+  const indexBuffer = gl.createBuffer();
+  if (!vertexArray || !vertexBuffer || !indexBuffer) throw new Error("WebGL fish geometry allocation failed");
+  gl.bindVertexArray(vertexArray);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, model.mesh.vertices, gl.STATIC_DRAW);
+  const stride = FISH_VERTEX_FLOATS * 4;
+  for (const [location, size, offset] of [[0, 3, 0], [1, 3, 12], [2, 2, 24], [3, 4, 32]]) {
+    gl.enableVertexAttribArray(location);
+    gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, offset);
+  }
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.mesh.indices, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  const textures = [model.color, model.normal, model.material].map(image => {
+    const texture = gl.createTexture();
+    if (!texture) throw new Error("WebGL fish texture allocation failed");
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    image.close();
+    return texture;
+  });
+  return { vertexArray, buffers: [vertexBuffer, indexBuffer], count: model.mesh.indices.length, textures };
+}
 
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
   const vertexArray = gl.createVertexArray();
@@ -2651,6 +2810,7 @@ async function createPondEngine(
       cloudProgram: [fullscreenVertexShader, cloudFragmentShader],
       displayProgram: [displayVertexShader, displayFragmentShader],
       surfaceProgram: [surfaceVertexShader, surfaceFragmentShader],
+      fishProgram: [fishVertexShader, fishFragmentShader],
     }, signal),
   ]);
   const [prepared, compiled] = results;
@@ -2667,7 +2827,7 @@ async function createPondEngine(
   const {
     evolveProgram, transformProgram, unpackProgram, filterProgram, foamProgram, probeProgram, glowProgram,
     causticProgram, causticBlurProgram, atmosphereProgram, cloudProgram,
-    displayProgram, surfaceProgram,
+    displayProgram, surfaceProgram, fishProgram,
   } = compiled.value;
   const surfaceGeometry = createSurfaceGeometry(gl, mesh);
   const fullscreen = createFullscreenGeometry(gl);
@@ -2695,6 +2855,63 @@ async function createPondEngine(
   }) : [];
   let glowIndex = 0;
   let glowActive = false;
+  // The fish model loads after the first frames. Until then the scene has no fish.
+  let fishMesh: ReturnType<typeof uploadFishModel> | null = null;
+  let fishTarget: FishTarget | null = null;
+  let renderedFish = false;
+  const fishSamples = Math.max(1, Math.min(4, Number(gl.getParameter(gl.MAX_SAMPLES)) || 1));
+  const fishFormats = [gl.RGBA8, gl.RGBA16F, gl.RGBA16F];
+  const fishLoaded = quality.fishCount > 0 && typeof fetch === "function" && typeof createImageBitmap === "function"
+    ? loadFishModel(signal).then(model => {
+      if (!signal.aborted && !gl.isContextLost()) fishMesh = uploadFishModel(gl, model);
+    }).catch(() => undefined)
+    : Promise.resolve();
+  const deleteFishTarget = () => {
+    if (!fishTarget) return;
+    gl.deleteFramebuffer(fishTarget.multisample);
+    fishTarget.renderbuffers.forEach(renderbuffer => gl.deleteRenderbuffer(renderbuffer));
+    fishTarget.resolves.forEach(framebuffer => gl.deleteFramebuffer(framebuffer));
+    fishTarget.textures.forEach(texture => gl.deleteTexture(texture));
+    fishTarget = null;
+  };
+  /**
+   * The fish pass draws into a multisample target, then resolves each buffer.
+   * The buffers start at zero, so the resolve multiplies every value by the
+   * covered part of the pixel, and the display shader divides it out.
+   */
+  const ensureFishTarget = (width: number, height: number) => {
+    if (fishTarget && fishTarget.width === width && fishTarget.height === height) return fishTarget;
+    deleteFishTarget();
+    const multisample = gl.createFramebuffer();
+    if (!multisample) throw new Error("WebGL fish framebuffer allocation failed");
+    gl.bindFramebuffer(gl.FRAMEBUFFER, multisample);
+    const renderbuffers = [...fishFormats, gl.DEPTH_COMPONENT24].map((format, index) => {
+      const renderbuffer = gl.createRenderbuffer();
+      if (!renderbuffer) throw new Error("WebGL fish renderbuffer allocation failed");
+      gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, fishSamples, format, width, height);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER,
+        index < fishFormats.length ? gl.COLOR_ATTACHMENT0 + index : gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+      return renderbuffer;
+    });
+    gl.drawBuffers(fishFormats.map((_, index) => gl.COLOR_ATTACHMENT0 + index));
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      throw new Error("WebGL fish framebuffer is incomplete");
+    }
+    const textures: WebGLTexture[] = [];
+    const resolves = fishFormats.map(format => {
+      const target = createRenderTarget(gl, width, height, format,
+        format === gl.RGBA8 ? gl.UNSIGNED_BYTE : gl.HALF_FLOAT, null, gl.LINEAR);
+      gl.bindTexture(gl.TEXTURE_2D, target.texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      textures.push(target.texture);
+      return target.framebuffer;
+    });
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    fishTarget = { width, height, multisample, renderbuffers, resolves, textures };
+    return fishTarget;
+  };
   const initialSpectrum = createTexture(gl, quality.simulationSize * OCEAN_CASCADE_COUNT,
     quality.simulationSize, gl.RGBA32F, gl.RGBA, gl.FLOAT, cascades.initial, gl.NEAREST);
   const spectrumTargets = [
@@ -2898,6 +3115,15 @@ async function createPondEngine(
     wavePhase: getUniform(gl, probeProgram, "u_wavePhase[0]"),
     probes: getUniform(gl, probeProgram, "u_probes[0]"),
   };
+  const fishUniforms = {
+    actors: getUniform(gl, fishProgram, "u_actors"),
+    scroll: getUniform(gl, fishProgram, "u_scroll"),
+    seed: getUniform(gl, fishProgram, "u_seed"),
+    resolution: getUniform(gl, fishProgram, "u_resolution"),
+    color: getUniform(gl, fishProgram, "u_fishColor"),
+    normalMap: getUniform(gl, fishProgram, "u_fishNormalMap"),
+    material: getUniform(gl, fishProgram, "u_fishMaterial"),
+  };
   const glowUniforms = {
     previous: getUniform(gl, glowProgram, "u_previous"),
     actors: getUniform(gl, glowProgram, "u_actors"),
@@ -2996,7 +3222,10 @@ async function createPondEngine(
     wavePhase: getUniform(gl, displayProgram, "u_wavePhase[0]"),
     absorption: getUniform(gl, displayProgram, "u_absorption"),
     actors: getUniform(gl, displayProgram, "u_actors"),
-    fishCount: getUniform(gl, displayProgram, "u_fishCount"),
+    fishAlbedo: getUniform(gl, displayProgram, "u_fishAlbedo"),
+    fishNormal: getUniform(gl, displayProgram, "u_fishNormal"),
+    fishPoint: getUniform(gl, displayProgram, "u_fishPoint"),
+    fishReady: getUniform(gl, displayProgram, "u_fishReady"),
     pelletCount: getUniform(gl, displayProgram, "u_pelletCount"),
     boatCount: getUniform(gl, displayProgram, "u_boatCount"),
     probeSurface: getUniform(gl, displayProgram, "u_probeSurface"),
@@ -3136,6 +3365,9 @@ async function createPondEngine(
   gl.uniform1i(displayUniforms.probeSurface, 10);
   gl.uniform1i(displayUniforms.sprayDroplets, quality.sprayDroplets);
   gl.uniform1i(displayUniforms.glow, 11);
+  gl.uniform1i(displayUniforms.fishAlbedo, 12);
+  gl.uniform1i(displayUniforms.fishNormal, 13);
+  gl.uniform1i(displayUniforms.fishPoint, 14);
   gl.uniform4f(displayUniforms.scenery, ...quality.scenery);
   gl.uniform1f(displayUniforms.gridSize, quality.simulationSize);
   gl.uniform1f(displayUniforms.domainSize, WATER_DOMAIN_METERS);
@@ -3147,6 +3379,13 @@ async function createPondEngine(
     WATER_ABSORPTION_RGB_PER_METER[1],
     WATER_ABSORPTION_RGB_PER_METER[2],
   );
+
+  gl.useProgram(fishProgram);
+  gl.uniform1i(fishUniforms.actors, 9);
+  gl.uniform1f(fishUniforms.seed, seedUniform);
+  gl.uniform1i(fishUniforms.color, 12);
+  gl.uniform1i(fishUniforms.normalMap, 13);
+  gl.uniform1i(fishUniforms.material, 14);
 
   gl.useProgram(glowProgram);
   gl.uniform1i(glowUniforms.previous, 1);
@@ -3408,6 +3647,39 @@ async function createPondEngine(
     gl.generateMipmap(gl.TEXTURE_2D);
   };
 
+  const renderFish = (width: number, height: number, scroll: number, life: LifeFrame) => {
+    renderedFish = false;
+    if (!fishMesh || life.school.count === 0) return;
+    const target = ensureFishTarget(width, height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.multisample);
+    gl.viewport(0, 0, width, height);
+    fishFormats.forEach((_, index) => gl.clearBufferfv(gl.COLOR, index, [0, 0, 0, 0]));
+    gl.clearDepth(1);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LESS);
+    gl.disable(gl.BLEND);
+    gl.useProgram(fishProgram);
+    gl.bindVertexArray(fishMesh.vertexArray);
+    bindTexture(gl, actorTexture, 9);
+    fishMesh.textures.forEach((texture, index) => bindTexture(gl, texture, 12 + index));
+    gl.uniform1f(fishUniforms.scroll, scroll);
+    gl.uniform2f(fishUniforms.resolution, width, height);
+    gl.drawElementsInstanced(gl.TRIANGLES, fishMesh.count, gl.UNSIGNED_SHORT, 0, life.school.count);
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(null);
+    target.resolves.forEach((framebuffer, index) => {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, target.multisample);
+      gl.readBuffer(gl.COLOR_ATTACHMENT0 + index);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, framebuffer);
+      gl.blitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    });
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, target.multisample);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    renderedFish = true;
+  };
+
   const renderSurface = (width: number, height: number, scroll: number, oceanTime: number) => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, surfaceTarget!.framebuffer);
     gl.viewport(0, 0, width, height);
@@ -3496,6 +3768,7 @@ async function createPondEngine(
     const surfaceWidth = Math.round(width + (canvasWidth - width) * refinement);
     const surfaceHeight = Math.round(height + (canvasHeight - height) * refinement);
     renderSurface(surfaceWidth, surfaceHeight, scroll, oceanTime);
+    renderFish(width, height, scroll, life);
     gl.bindFramebuffer(gl.FRAMEBUFFER, scaled ? scene.framebuffer : null);
     gl.viewport(0, 0, width, height);
     gl.useProgram(displayProgram);
@@ -3568,7 +3841,11 @@ async function createPondEngine(
     gl.uniform1f(displayUniforms.lifeTime, life.time);
     gl.uniform1i(displayUniforms.burstCount, life.burstCount);
     if (life.burstCount > 0) gl.uniform4fv(displayUniforms.bursts, life.bursts);
-    gl.uniform1i(displayUniforms.fishCount, school.count);
+    const fishDrawn = renderedFish && school.count > 0;
+    gl.uniform1f(displayUniforms.fishReady, fishDrawn ? 1 : 0);
+    if (fishDrawn && fishTarget) {
+      fishTarget.textures.forEach((texture, index) => bindTexture(gl, texture, 12 + index));
+    }
     gl.uniform1i(displayUniforms.pelletCount, life.pelletCount);
     gl.uniform1i(displayUniforms.boatCount, life.boatCount);
     gl.uniform1i(displayUniforms.splashCount, life.splashCount);
@@ -3642,6 +3919,13 @@ async function createPondEngine(
     gl.deleteBuffer(probeBuffer);
     gl.deleteProgram(probeProgram);
     gl.deleteProgram(glowProgram);
+    gl.deleteProgram(fishProgram);
+    deleteFishTarget();
+    if (fishMesh) {
+      gl.deleteVertexArray(fishMesh.vertexArray);
+      fishMesh.buffers.forEach(buffer => gl.deleteBuffer(buffer));
+      fishMesh.textures.forEach(texture => gl.deleteTexture(texture));
+    }
     for (const target of glowTargets) {
       gl.deleteFramebuffer(target.framebuffer);
       gl.deleteTexture(target.texture);
@@ -3683,7 +3967,7 @@ async function createPondEngine(
     gl.deleteProgram(displayProgram);
   };
 
-  return { destroy, readProbes, render };
+  return { destroy, fishLoaded, readProbes, render };
 }
 
 function getSceneLight(
@@ -4413,6 +4697,8 @@ export default function PondSurface({
       }
       engine = prepared;
       requestRender();
+      // A still scene draws only a few frames, so draw again once the fish model is ready.
+      prepared.fishLoaded.then(() => requestRender());
     }).catch(error => {
       if (controller.signal.aborted) return;
       canvas.dataset.webgl = "fallback";

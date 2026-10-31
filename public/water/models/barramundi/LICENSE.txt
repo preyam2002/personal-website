@@ -1,0 +1,11 @@
+Barramundi Fish
+Source: Khronos glTF Sample Assets, Models/BarramundiFish
+https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/BarramundiFish
+Author: Microsoft, 2017
+License: Creative Commons Zero v1.0 Universal (CC0 1.0)
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+Changes: the mesh is centered, scaled to unit length, and turned so the head
+points along +z. The vertex data is stored as raw little-endian arrays in
+mesh.bin. The textures are resized to 512 px (256 px for occlusion,
+roughness, and metalness) and stored as JPEG.

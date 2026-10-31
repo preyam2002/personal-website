@@ -108,18 +108,26 @@ vec3 glowRadiance(float glow) {
 }
 
 /**
- * Break the surface glow into points of light, as single plankton cells flash.
+ * Return the light of single plankton cells over the glow map.
  *
- * The points drift and twinkle. Where one pixel covers several points, the
- * pattern fades to its mean, so distant water shows no aliasing. The mean is one.
+ * Real bioluminescence is a field of short, sharp flashes, not a haze. The
+ * sparks sit on a grid of world cells that never shrinks below about two and a
+ * half pixels, so a spark always covers at least one pixel and does not
+ * shimmer. Each cell flashes on its own clock. The glow sets the chance that a
+ * cell holds a spark. A faint diffuse part remains for the light that the
+ * water scatters.
  */
-float glowSparkle(vec2 position, float footprint) {
-  float detail = 1.0 - smoothstep(0.015, 0.06, footprint);
-  if (detail <= 0.0) return 1.0;
-  vec2 drift = vec2(u_lifeTime * 0.05, -u_lifeTime * 0.04);
-  float cells = noise21(position * 18.0 + drift);
-  float twinkle = 0.55 + 0.45 * sin(u_lifeTime * 2.3 + noise21(position * 5.0 - drift) * 18.0);
-  float sparkle = cells * cells * cells * twinkle * 7.5;
-  return mix(1.0, 0.35 + sparkle, detail);
+float glowSparkle(vec2 position, float footprint, float glow) {
+  float cell = max(footprint * 2.5, 0.035);
+  vec2 grid = position / cell;
+  vec2 index = floor(grid);
+  vec3 random = hash33(vec3(index, floor(log2(cell) * 2.0) + 17.0));
+  float flash = fract(u_lifeTime * (0.5 + random.z) + random.x * 7.0);
+  float pulse = exp(-flash * 9.0);
+  vec2 spot = index + 0.2 + 0.6 * random.xy;
+  float radius = cell * 0.28;
+  float spark = 1.0 - smoothstep(radius * 0.3, radius, length(grid - spot) * cell);
+  float present = step(random.y, clamp(glow * 3.0, 0.0, 0.9));
+  return 0.25 + spark * pulse * present * 24.0;
 }
 `;
