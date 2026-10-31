@@ -166,11 +166,27 @@ vec3 fishAlbedo(vec3 local, float variant, out float silver) {
   return color * mix(0.88, 1.12, variant);
 }
 
+/**
+ * Return the caustic gain of the sunlight at a point under water.
+ *
+ * The point projects along the refracted sun ray onto the seabed caustic map.
+ * Near the surface the pattern is out of focus, so the gain fades to one there.
+ * The map only exists while the camera can see below the surface.
+ */
+float causticGain(vec3 point) {
+  if (u_scroll < 0.09) return 1.0;
+  vec3 light = refractedSunDirection();
+  float travel = (u_floorDepth + point.y) / max(-light.y, 0.0001);
+  vec2 floorPoint = point.xz + light.xz * travel;
+  float energy = textureLod(u_caustics, fract(floorPoint / u_domainSize + 0.5), 0.75).r;
+  return mix(1.0, min(0.6 + energy * 3.0, 2.6), smoothstep(0.5, 5.0, -point.y));
+}
+
 vec3 fishRadianceInWater(vec3 position, vec3 normal, vec3 direction, vec3 albedo, float silver) {
   vec3 extinction = waterExtinctionCoefficient();
   vec3 light = refractedSunDirection();
   float depth = max(-position.y, 0.0);
-  vec3 sun = primaryLightRadiance() * exp(-extinction * depth / max(-light.y, 0.0001));
+  vec3 sun = primaryLightRadiance() * exp(-extinction * depth / max(-light.y, 0.0001)) * causticGain(position);
   vec3 skylight = v_diffuseSkyRadiance * 0.92 * exp(-extinction * depth);
   vec3 ambient = mix(waterAmbientRadiance() * 1.4, skylight, normal.y * 0.5 + 0.5);
   vec3 diffuse = albedo * (sun * max(dot(normal, -light), 0.0) * 0.85 + ambient);

@@ -1306,6 +1306,10 @@ const float WATER_IOR = ${WATER_IOR.toFixed(6)};
 bool g_crossing = false;
 // The distance to the nearest opaque thing that the underwater path found.
 float g_frontDistance = 52.0;
+// The angle of one pixel, and the distance a ray traveled before its origin.
+// Together they give the width of the pixel cone for soft edges.
+float g_pixelAngle = 0.001;
+float g_coneOffset = 0.0;
 vec2 g_surfaceParameter;
 vec3 g_surfaceFootprint;
 ${glslNoise}
@@ -2228,6 +2232,7 @@ void main() {
     origin.y - localSurfaceHeight
   );
   g_crossing = cameraUnderwaterMix > 0.001 && cameraUnderwaterMix < 0.999;
+  g_pixelAngle = 2.0 / (focalLength * u_resolution.y);
   vec3 aboveOrigin = vec3(
     origin.x,
     max(origin.y, localSurfaceHeight + 0.025),
