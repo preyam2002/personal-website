@@ -56,6 +56,14 @@ import {
 import { lifeReflectionShader, lifeShader } from "@/lib/oceanLifeShaders";
 import { glowFragmentShader, glowSampleShader, nightGlowStrength } from "@/lib/oceanGlow";
 import {
+  BURST_LIFETIME_SECONDS,
+  BURST_SLOTS,
+  JELLY_SLOTS,
+  KELP_SLOTS,
+  VENT_SLOTS,
+  sceneryShader,
+} from "@/lib/oceanSceneryShaders";
+import {
   createBoats,
   packBoats,
   placeBoat,
@@ -154,6 +162,8 @@ type QualityProfile = {
   name: Exclude<WaterQuality, "static">;
   pixelBudget: number;
   rippleSlots: number;
+  // Kelp stalks, jellyfish, manta rays, and bubble vents below the surface.
+  scenery: readonly [number, number, number, number];
   sprayDroplets: number;
   simulationSize: number;
 };
@@ -188,6 +198,7 @@ const FULL_QUALITY: QualityProfile = {
   name: "full",
   pixelBudget: 1_000_000,
   rippleSlots: RIPPLE_SLOTS,
+  scenery: [KELP_SLOTS, JELLY_SLOTS, 1, VENT_SLOTS],
   sprayDroplets: 18,
   simulationSize: SIMULATION_SIZE,
 };
@@ -212,6 +223,7 @@ const REDUCED_QUALITY: QualityProfile = {
   name: "reduced",
   pixelBudget: 300_000,
   rippleSlots: 6,
+  scenery: [16, 5, 1, 3],
   sprayDroplets: 10,
   simulationSize: 128,
 };
@@ -236,6 +248,7 @@ const LOW_QUALITY: QualityProfile = {
   name: "low",
   pixelBudget: 180_000,
   rippleSlots: 3,
+  scenery: [0, 0, 0, 0],
   sprayDroplets: 0,
   simulationSize: 64,
 };
@@ -1291,6 +1304,8 @@ out vec4 outColor;
 const float PI = 3.141592653589793;
 const float WATER_IOR = ${WATER_IOR.toFixed(6)};
 bool g_crossing = false;
+// The distance to the nearest opaque thing that the underwater path found.
+float g_frontDistance = 52.0;
 vec2 g_surfaceParameter;
 vec3 g_surfaceFootprint;
 ${glslNoise}
@@ -1937,6 +1952,7 @@ vec3 sampleUnderwaterRay(vec3 origin, vec3 direction, int sampleCount) {
 
 ${lifeShader}
 ${lifeReflectionShader}
+${sceneryShader}
 
 vec3 renderAboveWater(vec3 origin, vec3 ray) {
   float distanceToSurface;
@@ -2057,7 +2073,10 @@ vec3 renderBelowWaterSurface(vec3 origin, vec3 ray) {
   bool surfaceHit = intersectOceanSurface(origin, ray, distanceToSurface, surfacePosition);
   float lifeDistance;
   vec3 lifeRadiance;
+  g_frontDistance = surfaceHit ? distanceToSurface : 52.0;
+  if (ray.y < -0.0001) g_frontDistance = min(g_frontDistance, (-u_floorDepth - origin.y) / ray.y);
   if (shadeLife(origin, ray, surfaceHit ? distanceToSurface : 52.0, true, lifeDistance, lifeRadiance)) {
+    g_frontDistance = lifeDistance;
     return lifeRadiance * exp(-extinction * lifeDistance)
       + underwaterVolume(origin, ray, lifeDistance, g_crossing ? 2 : 3);
   }
@@ -2157,6 +2176,12 @@ vec3 renderBelowWater(
   vec3 up
 ) {
   vec3 color = renderBelowWaterSurface(origin, ray);
+  SceneryHit scenery;
+  if (traceScenery(origin, ray, g_frontDistance, scenery)) {
+    vec3 front = scenery.radiance * exp(-waterExtinctionCoefficient() * scenery.distance)
+      + underwaterVolume(origin, ray, scenery.distance, 2);
+    color = mix(color, front, scenery.alpha);
+  }
   float snowDistance = ray.y > 0.02
     ? max(-origin.y / ray.y, 0.0)
     : 40.0;
@@ -2303,6 +2328,8 @@ export type LifeFrame = {
   splashCount: number;
   seconds: number;
   time: number;
+  bursts: Float32Array;
+  burstCount: number;
 };
 
 function createFullscreenGeometry(gl: WebGL2RenderingContext) {
@@ -2498,6 +2525,9 @@ const FRAME_INTERVAL_TOLERANCE = 2.5;
 // Input acts on the water only while the camera sits above the surface.
 const INTERACTION_SCROLL_LIMIT = 0.16;
 const INTERACTION_DISTANCE = 40;
+const UNDERWATER_SCROLL_START = 0.2;
+const UNDERWATER_REACH = 4.5;
+const TEXT_SELECTOR = "p, h1, h2, h3, li, time, span";
 const TAP_RIPPLE_AMPLITUDE = 0.14;
 const PELLET_RIPPLE_AMPLITUDE = 0.04;
 const BITE_RIPPLE_AMPLITUDE = 0.05;
@@ -2960,6 +2990,9 @@ async function createPondEngine(
     glow: getUniform(gl, displayProgram, "u_glow"),
     glowStrength: getUniform(gl, displayProgram, "u_glowStrength"),
     lifeTime: getUniform(gl, displayProgram, "u_lifeTime"),
+    scenery: getUniform(gl, displayProgram, "u_scenery"),
+    bursts: getUniform(gl, displayProgram, "u_bursts[0]"),
+    burstCount: getUniform(gl, displayProgram, "u_burstCount"),
     lifeLow: getUniform(gl, displayProgram, "u_lifeLow"),
     lifeHigh: getUniform(gl, displayProgram, "u_lifeHigh"),
     airLow: getUniform(gl, displayProgram, "u_airLow"),
@@ -3087,6 +3120,7 @@ async function createPondEngine(
   gl.uniform1i(displayUniforms.probeSurface, 10);
   gl.uniform1i(displayUniforms.sprayDroplets, quality.sprayDroplets);
   gl.uniform1i(displayUniforms.glow, 11);
+  gl.uniform4f(displayUniforms.scenery, ...quality.scenery);
   gl.uniform1f(displayUniforms.gridSize, quality.simulationSize);
   gl.uniform1f(displayUniforms.domainSize, WATER_DOMAIN_METERS);
   gl.uniform1f(displayUniforms.floorDepth, OCEAN_DEPTH_METERS);
@@ -3516,6 +3550,8 @@ async function createPondEngine(
     if (glowStrength > 0) bindTexture(gl, glowTargets[glowIndex].texture, 11);
     gl.uniform1f(displayUniforms.glowStrength, glowStrength);
     gl.uniform1f(displayUniforms.lifeTime, life.time);
+    gl.uniform1i(displayUniforms.burstCount, life.burstCount);
+    if (life.burstCount > 0) gl.uniform4fv(displayUniforms.bursts, life.bursts);
     gl.uniform1i(displayUniforms.fishCount, school.count);
     gl.uniform1i(displayUniforms.pelletCount, life.pelletCount);
     gl.uniform1i(displayUniforms.boatCount, life.boatCount);
@@ -3767,6 +3803,7 @@ export default function PondSurface({
     let pressedAt = -Infinity;
     let gesturePointer = "";
     const wake = { point: null as Vector3 | null, time: 0 };
+    const bursts: { point: Vector3; start: number }[] = [];
     // Probe results come back one frame later. The keys connect them to their objects.
     const probeSamples = new Map<string, ProbeSample>();
     const probeReadback = new Float32Array(PROBE_SLOTS * PROBE_ROWS * 4);
@@ -3799,7 +3836,7 @@ export default function PondSurface({
         if (speed > FAST_POINTER_SPEED) pointer.fleeUntil = lifeTime + 0.4;
         const flee = lifeTime < pointer.fleeUntil;
         stimuli.push({
-          position: [pointer.point[0], -0.6, pointer.point[2]],
+          position: isUnderwater() ? pointer.point : [pointer.point[0], -0.6, pointer.point[2]],
           radius: flee ? 2.6 : 5,
           strength: flee ? 9 : 2,
           mode: flee ? "flee" : "follow",
@@ -3849,6 +3886,8 @@ export default function PondSurface({
       splashCount: 0,
       seconds: 0,
       time: 0,
+      bursts: new Float32Array(BURST_SLOTS * 4),
+      burstCount: 0,
     };
     const lifeEvents: LifeEvent[] = [];
     const advanceLife = (seconds: number) => {
@@ -4086,6 +4125,9 @@ export default function PondSurface({
       }
       if (reducedMotion || previewTime !== null) lifeFrame.seconds = 0;
       lifeFrame.time = lifeTime;
+      while (bursts.length > 0 && lifeTime - bursts[0].start > BURST_LIFETIME_SECONDS) bursts.shift();
+      lifeFrame.burstCount = bursts.length;
+      bursts.forEach((burst, index) => lifeFrame.bursts.set([...burst.point, lifeTime - burst.start], index * 4));
       if (isInteractive()) handleGestures(gestures.poll(timestamp));
       else gestures.cancel();
       updateStimuli(timestamp);
@@ -4127,11 +4169,24 @@ export default function PondSurface({
       }
     };
 
+    // Below the surface, input acts on a point at a fixed reach along the pointer ray.
+    const isUnderwater = () => renderedScrollProgress >= UNDERWATER_SCROLL_START
+      && getOceanCamera(renderedScrollProgress, seedPhase).origin[1] < -0.4;
     const isInteractive = () => engine !== null
       && !reducedMotion
       && previewTime === null
       && canvas.dataset.webgl === "active"
-      && renderedScrollProgress < INTERACTION_SCROLL_LIMIT;
+      && (renderedScrollProgress < INTERACTION_SCROLL_LIMIT || isUnderwater());
+
+    const toUnderwaterPoint = (clientX: number, clientY: number): Vector3 => {
+      const bounds = canvas.getBoundingClientRect();
+      const aspect = bounds.width / Math.max(bounds.height, 1);
+      const x = ((clientX - bounds.left) / Math.max(bounds.width, 1) * 2 - 1) * aspect;
+      const y = 1 - (clientY - bounds.top) / Math.max(bounds.height, 1) * 2;
+      const camera = getOceanCamera(renderedScrollProgress, seedPhase);
+      const ray = getCameraRay(camera, x, y);
+      return camera.origin.map((value, axis) => value + ray[axis] * UNDERWATER_REACH) as Vector3;
+    };
 
     const toWaterPoint = (clientX: number, clientY: number) => {
       const bounds = canvas.getBoundingClientRect();
@@ -4206,6 +4261,14 @@ export default function PondSurface({
           continue;
         }
         if (event.type !== "tap") continue;
+        if (isUnderwater()) {
+          // A tap below the surface releases a burst of bubbles, and the fish near it scatter.
+          const point = toUnderwaterPoint(event.x, event.y);
+          if (bursts.length >= BURST_SLOTS) bursts.shift();
+          bursts.push({ point, start: lifeTime });
+          threats.push({ point, until: lifeTime + 0.6 });
+          continue;
+        }
         const point = toWaterPoint(event.x, event.y);
         if (!point) continue;
         ripples.add(point[0], point[2], TAP_RIPPLE_AMPLITUDE, lifeTime);
@@ -4214,8 +4277,9 @@ export default function PondSurface({
       }
     };
 
-    const isSceneTarget = (event: PointerEvent) =>
-      !(event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR));
+    // Below the surface the portfolio text covers the scene, so text also keeps its normal behavior.
+    const isSceneTarget = (event: PointerEvent) => !(event.target instanceof Element
+      && event.target.closest(isUnderwater() ? `${INTERACTIVE_SELECTOR}, ${TEXT_SELECTOR}` : INTERACTIVE_SELECTOR));
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || !isInteractive() || !isSceneTarget(event)) return;
       wake.point = null;
@@ -4226,7 +4290,9 @@ export default function PondSurface({
       if (!event.isPrimary) return;
       handleGestures(gestures.move(event.pointerId, event.clientX, event.clientY, event.timeStamp));
       if (!isInteractive()) return;
-      const point = isSceneTarget(event) ? toWaterPoint(event.clientX, event.clientY) : null;
+      const point = !isSceneTarget(event) ? null
+        : isUnderwater() ? toUnderwaterPoint(event.clientX, event.clientY)
+          : toWaterPoint(event.clientX, event.clientY);
       if (point && pointer.point && pointer.movedAt > 0) {
         pointer.speed = smoothPointerSpeed(
           pointer.speed,
