@@ -21,6 +21,7 @@ import {
   type DiverInput,
 } from "./player";
 import type { Discoverable, DiverView, GameEnvironment, GameQuality, GameSystem } from "./types";
+import { createResolutionScaler } from "./frameBudget";
 import { SPAWN, WORLD_SIZE, seabedHeight, zoneAt } from "./world";
 
 export type GameHud = {
@@ -530,6 +531,8 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
   const pixelRatio = Math.min(window.devicePixelRatio || 1, quality === "high" ? 1.5 : quality === "medium" ? 1 : 0.75);
   renderer.setPixelRatio(pixelRatio);
+  // Several passes render each frame, so the frame statistics reset once per frame.
+  renderer.info.autoReset = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.55;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -745,20 +748,25 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
     messageTimer = seconds;
   };
 
+  // The render scale falls on slow devices to hold the frame rate, and rises again when there is time.
+  const scaler = createResolutionScaler({ min: quality === "high" ? 0.6 : 0.5 });
+  const stats = { fps: 60, cpuMilliseconds: 0, logicMilliseconds: 0, renderScale: 1, drawCalls: 0, triangles: 0 };
   const resize = () => {
     width = Math.max(1, canvas.clientWidth);
     height = Math.max(1, canvas.clientHeight);
+    const ratio = pixelRatio * scaler.scale;
+    renderer.setPixelRatio(ratio);
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    const pixelWidth = Math.round(width * pixelRatio);
-    const pixelHeight = Math.round(height * pixelRatio);
+    const pixelWidth = Math.round(width * ratio);
+    const pixelHeight = Math.round(height * ratio);
     for (const target of [sceneTarget, volumeTarget, surfaceTarget]) target.setSize(pixelWidth, pixelHeight);
-    composer.setPixelRatio(pixelRatio);
+    composer.setPixelRatio(ratio);
     composer.setSize(width, height);
     surfaceUniforms.resolution.value.set(pixelWidth, pixelHeight);
-    (snow.material as THREE.ShaderMaterial).uniforms.pixelRatio.value = pixelRatio;
-    (breath.points.material as THREE.ShaderMaterial).uniforms.pixelRatio.value = pixelRatio;
+    (snow.material as THREE.ShaderMaterial).uniforms.pixelRatio.value = ratio;
+    (breath.points.material as THREE.ShaderMaterial).uniforms.pixelRatio.value = ratio;
   };
 
   const updateBreath = (delta: number) => {
@@ -795,8 +803,13 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
 
   const frame = (now: number) => {
     animationFrame = requestAnimationFrame(frame);
-    const delta = lastTime ? Math.min((now - lastTime) / 1000, 0.1) : 0;
+    const frameStart = performance.now();
+    const rawDelta = lastTime ? (now - lastTime) / 1000 : 0;
+    const delta = Math.min(rawDelta, 0.1);
     lastTime = now;
+    renderer.info.reset();
+    if (running && scaler.update(rawDelta) !== null) resize();
+    if (rawDelta > 0 && rawDelta < 1) stats.fps += (1 / rawDelta - stats.fps) * 0.1;
     if (running) {
       gameTime += delta;
       const events = stepDiver(diver, input, delta, seabedHeight);
@@ -824,7 +837,9 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
     diverView.depth = Math.max(-camera.position.y, 0);
 
     sharedUniforms.uTime.value = gameTime;
+    const logicStart = performance.now();
     for (const system of systems) system.update({ time: gameTime, delta: running ? delta : 0, camera, diver: diverView });
+    stats.logicMilliseconds += (performance.now() - logicStart - stats.logicMilliseconds) * 0.1;
     updateBreath(running ? delta : 0);
 
     // Keep the shadow box and the surface grid around the diver.
@@ -864,6 +879,10 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
     finish.uniforms.underwater.value = diverView.underwater ? 1 : 0;
     finish.uniforms.flash.value = flash;
     composer.render(delta);
+    stats.cpuMilliseconds += (performance.now() - frameStart - stats.cpuMilliseconds) * 0.05;
+    stats.renderScale = scaler.scale;
+    stats.drawCalls = renderer.info.render.calls;
+    stats.triangles = renderer.info.render.triangles;
 
     if (messageTimer > 0) {
       messageTimer -= delta;
@@ -951,6 +970,10 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
       return null;
     },
     resize,
+    /** Frame rate, CPU time per frame, render scale, draw calls and triangles of the last frame. */
+    stats() {
+      return { ...stats };
+    },
     dispose() {
       cancelAnimationFrame(animationFrame);
       for (const system of systems) system.dispose();

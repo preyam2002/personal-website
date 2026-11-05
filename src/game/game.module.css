@@ -170,6 +170,17 @@
   transform: translate(-50%, -50%);
 }
 
+.stats {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--glass);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
 .touchControls {
   position: absolute;
   inset: 0;

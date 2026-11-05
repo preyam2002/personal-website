@@ -48,6 +48,8 @@ export default function OceanGame() {
   const [selected, setSelected] = useState<string | null>(null);
   const [stickView, setStickView] = useState<{ left: number; top: number; x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState<ReturnType<Engine["stats"]> | null>(null);
 
   useEffect(() => {
     touchMode.current = window.matchMedia("(pointer: coarse)").matches;
@@ -64,6 +66,7 @@ export default function OceanGame() {
     hudTime.current = now;
     lastHud.current = next;
     setHud(next);
+    if (engineRef.current) setStats(engineRef.current.stats());
   }, []);
 
   const requestLock = useCallback(() => {
@@ -149,6 +152,10 @@ export default function OceanGame() {
       if (event.code === "KeyJ") {
         event.preventDefault();
         toggleJournal();
+        return;
+      }
+      if (event.code === "Backquote") {
+        setShowStats(value => !value);
         return;
       }
       if (event.code === "KeyF" && !event.repeat) {
@@ -315,6 +322,11 @@ export default function OceanGame() {
           {hud.zone && <div className={styles.zone}>{hud.zone}</div>}
           {hud.message && <div className={styles.message}>{hud.message}</div>}
           <div className={styles.reticle} aria-hidden="true" />
+          {showStats && stats && (
+            <div className={styles.stats}>
+              {Math.round(stats.fps)} fps · {stats.cpuMilliseconds.toFixed(1)} ms frame · {stats.logicMilliseconds.toFixed(1)} ms logic · {Math.round(stats.renderScale * 100)}% res · {stats.drawCalls} draws · {(stats.triangles / 1000).toFixed(0)}k tris
+            </div>
+          )}
         </div>
       )}
 
@@ -381,6 +393,7 @@ export default function OceanGame() {
                   <dt>F</dt><dd>Take a photo</dd>
                   <dt>J</dt><dd>Journal</dd>
                   <dt>Esc</dt><dd>Pause</dd>
+                  <dt>`</dt><dd>Frame rate</dd>
                   <dt>Touch</dt><dd>Left thumb swims, right thumb looks</dd>
                 </dl>
               </>
