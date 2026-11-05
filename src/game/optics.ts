@@ -22,6 +22,19 @@ export function waterTransmittance(meters: number): [number, number, number] {
   return WATER_EXTINCTION.map(value => Math.exp(-value * Math.max(meters, 0))) as [number, number, number];
 }
 
+/**
+ * Gains for a partial white balance at a depth, like a diver's eye or a camera.
+ *
+ * The water at depth tints daylight blue-green. Full correction would divide by
+ * that tint; real footage keeps most of the tint, so the gains use only a part
+ * of the correction. Green keeps a gain of 1. Above the water the gains are 1.
+ */
+export function whiteBalance(depth: number, strength = 0.35, maxGain = 4): [number, number, number] {
+  if (depth <= 0) return [1, 1, 1];
+  const tint = WATER_COLOR.map((value, index) => value * Math.exp(-WATER_KD[index] * Math.max(depth, 1)));
+  return tint.map(value => Math.min(maxGain, Math.pow(tint[1] / value, strength))) as [number, number, number];
+}
+
 /** The length of a straight segment from a to b that lies below the surface y = 0. */
 export function underwaterLength(a: readonly number[], b: readonly number[]) {
   const length = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);

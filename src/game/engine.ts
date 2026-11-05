@@ -11,7 +11,7 @@ import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { creatureSystems } from "./creatures";
 import { environmentSystems } from "./environment";
 import { evaluatePhoto, createJournal, journalProgress, recordDiscovery, type JournalEntry } from "./gameState";
-import { opticsShader } from "./optics";
+import { opticsShader, whiteBalance } from "./optics";
 import {
   createDiver,
   isUnderwater,
@@ -677,6 +677,13 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
     vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: finishFragment,
   });
+  // A partial white balance in linear light, before tone mapping, as a camera or the eye applies.
+  const balance = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, gain: { value: new THREE.Vector3(1, 1, 1) } },
+    vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: "uniform sampler2D tDiffuse; uniform vec3 gain; varying vec2 vUv; void main() { vec4 color = texture2D(tDiffuse, vUv); gl_FragColor = vec4(color.rgb * gain, color.a); }",
+  });
+  composer.addPass(balance);
   composer.addPass(new OutputPass());
   composer.addPass(finish);
   if (quality !== "low") composer.addPass(new SMAAPass());
@@ -874,6 +881,7 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
     const targetExposure = diverView.underwater ? 0.9 * Math.pow(2, Math.min(diverView.depth / 15, 1.6)) : 0.55;
     const adapt = options.reducedMotion ? 1 : 1 - Math.exp(-delta / 1.5);
     renderer.toneMappingExposure += (targetExposure - renderer.toneMappingExposure) * adapt;
+    balance.uniforms.gain.value.set(...whiteBalance(diverView.underwater ? diverView.depth : 0));
     flash = Math.max(flash - delta * 2.5, 0);
     finish.uniforms.time.value = gameTime;
     finish.uniforms.underwater.value = diverView.underwater ? 1 : 0;

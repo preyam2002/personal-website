@@ -1,4 +1,4 @@
-import { WATER_EXTINCTION, opticsShader, underwaterLength, waterTransmittance } from "../optics";
+import { WATER_EXTINCTION, opticsShader, underwaterLength, waterTransmittance, whiteBalance } from "../optics";
 
 describe("water optics", () => {
   it("removes red light first and blue light last", () => {
@@ -18,5 +18,16 @@ describe("water optics", () => {
 
   it("puts the same coefficients into the shader", () => {
     expect(opticsShader).toContain(WATER_EXTINCTION.map(value => value.toFixed(4)).join(", "));
+  });
+
+  it("warms the view under water with a partial white balance", () => {
+    expect(whiteBalance(0)).toEqual([1, 1, 1]);
+    const shallow = whiteBalance(3);
+    const deep = whiteBalance(20);
+    expect(shallow[1]).toBeCloseTo(1);
+    expect(shallow[0]).toBeGreaterThan(1);
+    expect(shallow[2]).toBeLessThan(1);
+    expect(deep[0]).toBeGreaterThan(shallow[0]);
+    expect(deep[0]).toBeLessThanOrEqual(4);
   });
 });
