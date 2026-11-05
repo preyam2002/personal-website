@@ -305,7 +305,8 @@ void main() {
     if (dot(transmitted, transmitted) > 0.0) {
       float facing = max(dot(view, -up), 0.0);
       float fresnel = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
-      vec3 sky = textureCube(skyCube, transmitted).rgb;
+      // The window passes the sky through the surface; the eye has adapted to the darker water.
+      vec3 sky = textureCube(skyCube, transmitted).rgb * 0.45;
       sky += sunColor * pow(max(dot(transmitted, sunDirection), 0.0), 300.0) * 25.0;
       color = mix(sky, water, fresnel);
     } else {
@@ -897,7 +898,7 @@ export async function createOceanGame(canvas: HTMLCanvasElement, options: OceanG
   return {
     start() {
       running = true;
-      showMessage("Look down and swim forward to dive. Press F to take a photo.", 5);
+      showMessage("Look down and swim forward to dive. Photograph what you find for your journal.", 5);
     },
     pause() {
       running = false;
