@@ -78,6 +78,9 @@ export default function LabPage() {
           <Link href="/lab-3d" className={styles.ghostLink}>
             WebGL 3D Route
           </Link>
+          <Link href="/game" className={styles.ghostLink}>
+            Ocean Dive Game
+          </Link>
           <Link href="/" className={styles.ghostLink}>
             Main Portfolio
           </Link>

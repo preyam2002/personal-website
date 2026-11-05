@@ -27,6 +27,11 @@ const COMBOS: Record<string, Combo> = {
       r.push("/#work");
     },
   },
+  "g o": {
+    keys: ["g", "o"],
+    description: "Ocean dive game",
+    exec: (r) => r.push("/game"),
+  },
 };
 
 const HELP_KEY = "?";
