@@ -376,7 +376,9 @@ if (vOceanWorld.y < 0.0) {
   reflectedLight.indirectSpecular *= oceanLight;
 }`);
     };
-    material.customProgramCacheKey = () => `ocean-optics:${material.type}`;
+    // Keep any key the material already has, so other shader edits get their own program.
+    const previousKey = material.customProgramCacheKey.bind(material);
+    material.customProgramCacheKey = () => `ocean-optics:${previousKey()}`;
     material.needsUpdate = true;
   };
 }
