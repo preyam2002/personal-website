@@ -1,22 +1,33 @@
 /**
- * Moon jellies (Aurelia): instanced bells about 30 cm across that pulse at
- * 0.24 Hz (a quick contraction over 35 % of the cycle, then a slow
- * relaxation), with a fringe of fine tentacles and four frilled oral arms that
- * trail the pulse.
+ * Moon jellies (Aurelia aurita): instanced saucer-shaped bells about 30 cm
+ * across with eight shallow marginal lobes, a fringe of hundreds of fine
+ * marginal tentacles, and four frilled oral arms. Bells pulse at about
+ * 0.24 Hz, the natural rate measured for free-swimming adults (a quick
+ * contraction over 35 % of the cycle, then a slow relaxation), each jelly at
+ * its own rate; the margin and tentacles lag the bell.
  *
  * Translucency without blending: the engine fogs the scene by its depth
  * buffer, so a blended, depth-less jelly would be fogged as if it were the far
  * background and vanish. Instead each jelly writes depth and mixes its lit
  * colour toward the open-water colour seen along the same ray. The fog pass
  * then treats that colour like the background, so the bell reads as clear
- * where it is thin and milky at the rim and the pink gonads. Nothing is
- * additive, so overlapping jellies never blow out.
+ * where it is thin and milky at the rim and where structure lies inside it.
+ *
+ * The inner anatomy is drawn in the shader on a plane inside the bell, found
+ * by following the view ray through the jelly (so it shifts with parallax
+ * under the clear outer surface): the four horseshoe gonads, the sixteen
+ * radial canals (eight branching, eight not), the ring canal, and the eight
+ * rhopalia in the marginal notches. Sunlight scatters forward through the
+ * bell, so jellies glow when seen against the light, and the margin and
+ * gonads catch the light like frosted glass. The tentacle fringe is a thin
+ * skirt whose fragments outside the tentacles are discarded; tentacles
+ * thinner than a pixel fade toward the water colour instead of flickering.
  */
 
 import * as THREE from "three";
 import type { GameSystemFactory } from "../types";
 import { WATER_COLOR, WATER_EXTINCTION, WATER_KD } from "../optics";
-import { loftRings, loftTube, mergeParts, type RGB } from "./geometry";
+import { loftRings, mergeParts, type RGB } from "./geometry";
 import { clamp, pulseContraction, TAU } from "./motion";
 import { JELLY_SWARMS } from "./routes";
 import { applyDeform, type VertexDeform } from "./swimMaterial";
@@ -25,14 +36,23 @@ const BELL_RADIUS = 0.15;
 const BELL_HEIGHT = 0.065;
 const PULSE_HZ = 0.24;
 const DRAW_DISTANCE = 140;
+const FRINGE_LENGTH = 0.07;
 
 const glsl = (values: readonly number[]) => `vec3(${values.map(value => value.toFixed(4)).join(", ")})`;
 
 type Vertex = Parameters<typeof loftRings>[0][number][number];
 
-/** One jelly: bell, fringe tentacles, and oral arms. aFlap holds (radial fraction, part, distance along). */
+/** How far the margin is notched at an angle: 1 at the eight rhopalia, 0 between them. */
+function notch(angle: number) {
+  const step = TAU / 8;
+  const offset = ((angle % step) + step) % step;
+  const distance = Math.min(offset, step - offset);
+  return Math.exp(-((distance / 0.07) ** 2));
+}
+
+/** One jelly: bell, tentacle fringe and oral arms. aFlap holds (radial fraction, part, distance along). */
 export function buildJellyGeometry(quality: "high" | "medium" | "low") {
-  const segments = quality === "high" ? 36 : quality === "medium" ? 28 : 20;
+  const segments = quality === "high" ? 48 : quality === "medium" ? 36 : 24;
   const white: RGB = [1, 1, 1];
   // The bell: outer surface from the apex to the rim, then the inner surface back to the centre.
   const profile: [number, number][] = [];
@@ -52,58 +72,89 @@ export function buildJellyGeometry(quality: "high" | "medium" | "low") {
     const ring: Vertex[] = [];
     for (let c = 0; c < segments; c += 1) {
       const angle = (c / segments) * TAU;
-      ring.push({ x: Math.cos(angle) * Math.max(r, 1e-4), y, z: Math.sin(angle) * Math.max(r, 1e-4), color: white, u: 0, v: c / segments, flap: [r / BELL_RADIUS, 0, 0] });
+      // Eight shallow lobes: the margin dips in at each rhopalium.
+      const lobe = 1 - 0.05 * notch(angle) * Math.pow(Math.min(r / BELL_RADIUS, 1), 6);
+      const radius = Math.max(r * lobe, 1e-4);
+      ring.push({ x: Math.cos(angle) * radius, y, z: Math.sin(angle) * radius, color: white, u: 0, v: c / segments, flap: [r / BELL_RADIUS, 0, 0] });
     }
     return ring;
   });
-  const bell = loftRings(rings, { capStart: false, capEnd: false });
+  const parts: THREE.BufferGeometry[] = [loftRings(rings, { capStart: false, capEnd: false })];
 
-  const parts: THREE.BufferGeometry[] = [bell];
-  const setPart = (geometry: THREE.BufferGeometry, radial: number, kind: number) => {
-    const flap = geometry.getAttribute("aFlap");
-    const uv = geometry.getAttribute("uv");
-    for (let index = 0; index < flap.count; index += 1) flap.setXYZ(index, radial, kind, uv.getX(index));
-    return geometry;
-  };
-  // Fringe tentacles around the rim.
-  const tentacles = quality === "high" ? 36 : quality === "medium" ? 24 : 12;
-  for (let index = 0; index < tentacles; index += 1) {
-    const angle = (index / tentacles) * TAU;
-    const length = 0.07 + ((index * 37) % 11) * 0.004;
-    const points: [number, number, number][] = [];
-    for (let k = 0; k <= 6; k += 1) {
-      const t = k / 6;
-      const r = BELL_RADIUS * (0.98 + 0.08 * t);
-      points.push([Math.cos(angle) * r, -0.01 - length * t, Math.sin(angle) * r]);
+  // The tentacle fringe: a short skirt hanging from the margin; the shader cuts it into tentacles.
+  const fringeColumns = quality === "high" ? 64 : quality === "medium" ? 48 : 32;
+  const fringeRows = quality === "low" ? 2 : 3;
+  const fringe: Vertex[][] = [];
+  for (let row = 0; row <= fringeRows; row += 1) {
+    const t = row / fringeRows;
+    const ring: Vertex[] = [];
+    for (let c = 0; c < fringeColumns; c += 1) {
+      const angle = (c / fringeColumns) * TAU;
+      const radius = BELL_RADIUS * (0.975 + 0.06 * t);
+      ring.push({ x: Math.cos(angle) * radius, y: -0.009 - FRINGE_LENGTH * t, z: Math.sin(angle) * radius, color: white, u: t, v: c / fringeColumns, flap: [1, 3, t] });
     }
-    parts.push(setPart(loftTube(points, t => 0.0022 * (1 - t * 0.6), 3, () => white), 1, 1));
+    fringe.push(ring);
   }
-  // Four oral arms, frilled ribbons hanging from the centre.
+  parts.push(loftRings(fringe, { capStart: false, capEnd: false }));
+
+  // Four oral arms: folded ribbons with ruffled edges, hanging from the centre.
+  const armRows = quality === "high" ? 12 : quality === "medium" ? 10 : 8;
+  const across = 2;
   for (let index = 0; index < 4; index += 1) {
-    const angle = (index / 4) * TAU + Math.PI / 4;
-    const points: [number, number, number][] = [];
-    for (let k = 0; k <= 10; k += 1) {
-      const t = k / 10;
-      const r = 0.012 + 0.03 * t;
-      points.push([Math.cos(angle) * r + Math.sin(t * 9) * 0.004, 0.0 - 0.13 * t, Math.sin(angle) * r + Math.cos(t * 9) * 0.004]);
+    const heading = (index / 4) * TAU + Math.PI / 4;
+    const radial: [number, number] = [Math.cos(heading), Math.sin(heading)];
+    const tangent: [number, number] = [-radial[1], radial[0]];
+    const arm: Vertex[][] = [];
+    for (let row = 0; row <= armRows; row += 1) {
+      const t = row / armRows;
+      const width = 0.016 * (1 - 0.45 * t) + 0.003;
+      const reach = 0.01 + 0.035 * t;
+      const y = 0.02 - 0.13 * t;
+      const ring: Vertex[] = [];
+      const point = (s: number, side: number) => {
+        // A U-shaped channel open toward the outside, its edges ruffled.
+        const edge = Math.pow(Math.abs(s), 3);
+        const ruffle = 0.006 * edge * Math.sin(t * 34 + s * 2 + index) * (0.4 + t);
+        const fold = -0.6 * width * (1 - s * s);
+        const thickness = 0.0016 * side;
+        const out = reach + fold + ruffle + thickness;
+        const lateral = s * width;
+        ring.push({
+          x: radial[0] * out + tangent[0] * lateral + Math.sin(t * 7 + index) * 0.004,
+          y: y + ruffle * 0.6,
+          z: radial[1] * out + tangent[1] * lateral + Math.cos(t * 7 + index) * 0.004,
+          color: white,
+          u: t,
+          v: 0,
+          flap: [0, 2, t],
+        });
+      };
+      for (let k = -across; k <= across; k += 1) point(k / across, 1);
+      for (let k = across; k >= -across; k -= 1) point(k / across, -1);
+      arm.push(ring);
     }
-    parts.push(setPart(loftTube(points, t => 0.011 * (1 - t * 0.5), 6, () => white, 0.35), 0, 2));
+    parts.push(loftRings(arm));
   }
   return mergeParts(parts);
 }
 
 /** The jelly deformation and the translucent finish. */
-function jellyDeform(uniforms: { uJellyTime: THREE.IUniform<number>; uJellySun: THREE.IUniform<THREE.Vector3> }): VertexDeform {
+function jellyDeform(uniforms: { uJellyTime: THREE.IUniform<number>; uJellySun: THREE.IUniform<THREE.Vector3>; uJellyTentacles: THREE.IUniform<number> }): VertexDeform {
+  const R = BELL_RADIUS.toFixed(4);
   return {
-    key: "moon-jelly",
+    key: "moon-jelly-aurelia",
     uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
     declarations: `
 uniform float uJellyTime;
 attribute vec3 aFlap;
 attribute vec2 aJelly;
 varying vec3 vJellyLocal;
-varying float vJellyKind;
+varying vec3 vJellyPos;
+varying vec3 vJellyCamera;
 varying vec3 vJellyWorld;
+varying float vJellyKind;
+varying float vJellyAlong;
+varying float vJellyPulse;
 float jellyContraction(float cycle) {
   float p = fract(cycle);
   return p < 0.35 ? sin(1.5707963 * p / 0.35) : 1.0 - smoothstep(0.35, 1.0, p);
@@ -111,44 +162,62 @@ float jellyContraction(float cycle) {
     body: `
   vJellyLocal = p;
   vJellyKind = aFlap.y;
+  vJellyAlong = aFlap.z;
   float rn = aFlap.x;
+  float bellK = jellyContraction(aJelly.x);
+  vJellyPulse = bellK;
   if (aFlap.y < 0.5) {
-    // The bell narrows by a quarter at the rim and deepens as it contracts.
-    float k = jellyContraction(aJelly.x);
+    // The bell narrows by a quarter at the rim and deepens as it contracts; the margin lags a little.
+    float k = jellyContraction(aJelly.x - 0.05 * rn * rn);
     float squeeze = 1.0 - 0.25 * k * pow(rn, 1.3);
     p.xz *= squeeze;
     p.y += 0.012 * k * (1.0 - rn) - 0.02 * k * rn * rn;
     n = normalize(vec3(n.x / squeeze, n.y, n.z / squeeze));
+  } else if (aFlap.y > 2.5) {
+    // The tentacle fringe follows the margin, then trails in behind it on each stroke.
+    float t = aFlap.z;
+    float rim = jellyContraction(aJelly.x - 0.05);
+    float lag = jellyContraction(aJelly.x - 0.1 - 0.25 * t);
+    vec2 radial = normalize(p.xz + 1e-6);
+    p.xz *= 1.0 - 0.25 * rim;
+    p.y -= 0.02 * rim;
+    p.xz -= radial * (0.03 * lag - 0.012 * (1.0 - lag)) * t;
+    p.y += 0.012 * lag * t;
+    float seed = aJelly.x * 6.2831853 + atan(p.z, p.x) * 5.0;
+    p.xz += vec2(sin(uJellyTime * 0.9 + seed + t * 3.0), cos(uJellyTime * 0.7 + seed * 1.3)) * 0.005 * t;
   } else {
-    // Tentacles and arms follow the rim with a lag down their length and sway in the water.
+    // Oral arms hang from the centre, lag the pulse and sway in the water.
     float t = aFlap.z;
     float k = jellyContraction(aJelly.x - t * 0.3);
-    if (aFlap.y < 1.5) {
-      p.xz *= 1.0 - 0.25 * k;
-      p.y -= 0.02 * k;
-    }
     float seed = aJelly.x * 6.2831853 + atan(p.z, p.x) * 3.0;
     p.x += sin(uJellyTime * 0.8 + seed + t * 3.0) * 0.012 * t;
     p.z += cos(uJellyTime * 0.6 + seed * 1.3 + t * 2.5) * 0.012 * t;
-    // Drag pulls them in behind the bell on each stroke.
     p.y -= 0.015 * k * t;
   }`,
     vertexAfterProject: `
 {
-  vec4 jellyWorld = vec4(transformed, 1.0);
+  mat4 jellyModel = modelMatrix;
 #ifdef USE_INSTANCING
-  jellyWorld = instanceMatrix * jellyWorld;
+  jellyModel = modelMatrix * instanceMatrix;
 #endif
-  vJellyWorld = (modelMatrix * jellyWorld).xyz;
+  vJellyWorld = (jellyModel * vec4(transformed, 1.0)).xyz;
+  vJellyPos = transformed;
+  vJellyCamera = (inverse(jellyModel) * vec4(cameraPosition, 1.0)).xyz;
 }`,
     fragmentDeclarations: `
 uniform vec3 uJellySun;
+uniform float uJellyTentacles;
 varying vec3 vJellyLocal;
-varying float vJellyKind;
+varying vec3 vJellyPos;
+varying vec3 vJellyCamera;
 varying vec3 vJellyWorld;
+varying float vJellyKind;
+varying float vJellyAlong;
+varying float vJellyPulse;
 const vec3 JELLY_EXTINCTION = ${glsl(WATER_EXTINCTION)};
 const vec3 JELLY_WATER_COLOR = ${glsl(WATER_COLOR)};
 const vec3 JELLY_KD = ${glsl(WATER_KD)};
+const float JELLY_R = ${R};
 // The open-water color along a view ray, as the engine's water volume pass computes it.
 vec3 jellyWaterColor(vec3 direction) {
   float cameraDepth = max(-cameraPosition.y, 0.0);
@@ -161,32 +230,123 @@ vec3 jellyWaterColor(vec3 direction) {
   // The engine scales the water color by the green part of the sun color: 0.95 * 3.2 / 3.
   return JELLY_WATER_COLOR * exp(-JELLY_KD * sampleDepth) * 1.0133 * phase * (1.0 - transmittance);
 }
-// Four horseshoe-shaped gonads seen through the bell.
-float jellyGonads(vec3 local) {
+float jellyHash(float x) {
+  return fract(sin(x * 91.3458) * 47453.5453);
+}
+// An antialiased line of half width w at distance d, given the distance's screen derivative.
+float jellyLine(float d, float w, float aa) {
+  float e = max(w, 0.5 * aa);
+  return (1.0 - smoothstep(e - 0.5 * aa, e + 0.5 * aa, d)) * (w / e);
+}
+// Four horseshoe gonads, each open toward the centre, with ruffled folds.
+float jellyGonads(vec2 q) {
   float mask = 0.0;
   for (int i = 0; i < 4; i++) {
     float a = 0.7853982 + float(i) * 1.5707963;
     vec2 axis = vec2(cos(a), sin(a));
-    vec2 offset = local.xz - axis * ${(BELL_RADIUS * 0.36).toFixed(4)};
-    float ring = 1.0 - smoothstep(0.004, 0.011, abs(length(offset) - ${(BELL_RADIUS * 0.17).toFixed(4)}));
-    float open = smoothstep(0.75, 0.35, dot(normalize(offset + 1e-5), axis));
-    mask = max(mask, ring * open);
+    vec2 offset = q - axis * (JELLY_R * 0.37);
+    float radius = length(offset);
+    float band = abs(radius - JELLY_R * 0.16) - JELLY_R * 0.035 * (0.8 + 0.2 * sin(atan(offset.y, offset.x) * 9.0));
+    float ring = 1.0 - smoothstep(-0.002, 0.003, band);
+    float open = smoothstep(-0.55, -0.15, dot(offset / max(radius, 1e-4), axis));
+    float folds = 0.75 + 0.25 * sin(atan(offset.y, offset.x) * 22.0 + radius * 600.0);
+    mask = max(mask, ring * open * folds);
   }
   return mask;
+}
+// Radial canals: sixteen from the stomach to the ring canal; the perradial and interradial ones branch.
+float jellyCanals(vec2 q, float aa) {
+  float r = length(q);
+  float theta = atan(q.y, q.x);
+  float sector = 3.14159265 / 8.0;
+  float index = floor(theta / sector + 0.5);
+  float d = (theta - index * sector) * r;
+  float branched = mod(index, 2.0) < 0.5 ? 1.0 : 0.0;
+  float dist = abs(d);
+  if (branched > 0.5) {
+    float b1 = 0.45 * max(r - JELLY_R * 0.55, 0.0);
+    dist = min(dist, abs(abs(d) - b1));
+    float b2 = 0.4 * max(r - JELLY_R * 0.75, 0.0);
+    dist = min(dist, abs(abs(abs(d) - b1) - b2));
+  }
+  float start = smoothstep(JELLY_R * 0.38, JELLY_R * 0.48, r) * (1.0 - smoothstep(JELLY_R * 0.92, JELLY_R * 0.95, r));
+  float canal = jellyLine(dist, 0.0007 + 0.0004 * branched, aa) * start;
+  float ringCanal = jellyLine(abs(r - JELLY_R * 0.93), 0.0011, aa);
+  return max(canal, ringCanal);
 }`,
     fragmentColor: `
-float jellyGonad = vJellyKind < 0.5 ? jellyGonads(vJellyLocal) : 0.0;
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.55, 0.62), jellyGonad);`,
+vec3 jellyView = normalize(vJellyPos - vJellyCamera);
+float jellyPlane = 0.016 + 0.012 * vJellyPulse;
+float jellyStep = abs(jellyView.y) > 1e-3 ? (jellyPlane - vJellyPos.y) / jellyView.y : 0.0;
+vec2 jellyHit = vJellyPos.xz + jellyView.xz * clamp(jellyStep, 0.0, 0.25);
+// Undo the bell's squeeze so the anatomy stays with the tissue.
+float jellyHitR = length(jellyHit) / JELLY_R;
+vec2 jellyQ = jellyHit / max(1.0 - 0.25 * vJellyPulse * pow(min(jellyHitR, 1.2), 1.3), 0.5);
+float jellyGonad = 0.0;
+float jellyCanal = 0.0;
+float jellyRhopalium = 0.0;
+float jellyStomach = 0.0;
+float jellyFringe = 0.0;
+if (vJellyKind < 0.5) {
+  jellyGonad = jellyGonads(jellyQ);
+  jellyCanal = jellyCanals(jellyQ, fwidth(length(jellyQ)) * 1.5);
+  float qa = atan(jellyQ.y, jellyQ.x);
+  float rhop = mod(qa + 0.19635, 0.785398) - 0.19635;
+  jellyRhopalium = 1.0 - smoothstep(0.0025, 0.0045, length(vec2(rhop * length(jellyQ), length(jellyQ) - JELLY_R * 0.955)));
+  // The stomach: a faint four-lobed cross at the centre.
+  float qr = length(jellyQ);
+  jellyStomach = (1.0 - smoothstep(JELLY_R * 0.12, JELLY_R * 0.24, qr * (0.8 + 0.2 * cos(4.0 * qa))));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.62, 0.78), jellyGonad);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.95, 0.82), jellyRhopalium);
+} else if (vJellyKind > 2.5) {
+  // Cut the fringe into tentacles: hundreds around the margin, none at the rhopalia.
+  float around = atan(vJellyLocal.z, vJellyLocal.x) / 6.2831853 + 0.5;
+  float x = around * uJellyTentacles + 0.35 * sin(vJellyAlong * 9.0 + around * 40.0) * vJellyAlong;
+  float id = floor(x);
+  float f = abs(fract(x) - 0.5);
+  float len = 0.35 + 0.65 * jellyHash(id);
+  float halfWidth = 0.09 * (1.0 - 0.6 * vJellyAlong);
+  float gap = abs(fract(around * 8.0 + 0.5) - 0.5);
+  jellyFringe = jellyLine(f, halfWidth, fwidth(x) * 1.2) * (1.0 - smoothstep(len - 0.1, len, vJellyAlong)) * smoothstep(0.015, 0.03, gap);
+  if (jellyFringe < 0.02) discard;
+}`,
     fragmentFinish: `
 {
-  float facing = abs(dot(normalize(normal), normalize(vViewPosition)));
-  float rim = pow(1.0 - facing, 2.0);
-  float radial = length(vJellyLocal.xz) / ${BELL_RADIUS.toFixed(4)};
-  // Faint radial canals and the milky margin.
-  float canals = smoothstep(0.85, 1.0, abs(cos(atan(vJellyLocal.z, vJellyLocal.x) * 8.0))) * smoothstep(0.3, 0.9, radial) * 0.12;
-  float opacity = vJellyKind < 0.5 ? 0.12 + rim * 0.6 + jellyGonad * 0.6 + canals + smoothstep(0.9, 1.0, radial) * 0.25 : vJellyKind < 1.5 ? 0.35 : 0.42;
-  vec3 water = jellyWaterColor(normalize(vJellyWorld - cameraPosition));
-  gl_FragColor.rgb = mix(water, gl_FragColor.rgb, clamp(opacity, 0.0, 0.95));
+  vec3 jellyNormal = normalize(normal);
+  vec3 jellyViewDir = normalize(vViewPosition);
+  float facing = abs(dot(jellyNormal, jellyViewDir));
+  float rim = pow(1.0 - facing, 2.5);
+  float radial = length(vJellyLocal.xz) / JELLY_R;
+  // Fine white specks of nematocyst warts on the outer surface.
+  vec2 speckCell = floor(vJellyLocal.xz * 900.0);
+  float speck = step(0.985, fract(sin(dot(speckCell, vec2(12.9898, 78.233))) * 43758.5453)) * 0.12;
+  float opacity;
+  if (vJellyKind < 0.5) {
+    // Path length through the clear mesoglea grows at grazing angles; the margin and anatomy are milky.
+    float milky = 0.08 + 0.55 * rim + 0.2 * smoothstep(0.85, 1.0, radial) + speck;
+    opacity = milky + jellyGonad * 0.55 + jellyCanal * 0.3 + jellyRhopalium * 0.6 + jellyStomach * 0.06;
+  } else if (vJellyKind > 2.5) {
+    opacity = 0.38 * jellyFringe;
+  } else {
+    // The oral arms: clear ribbons whose frilled, folded edges are milky.
+    opacity = 0.14 + 0.32 * rim;
+  }
+  vec3 jellyWorldView = normalize(vJellyWorld - cameraPosition);
+  vec3 water = jellyWaterColor(jellyWorldView);
+  // Sunlight under water: travelling down along the refracted sun ray, fading with depth.
+  vec3 sunTravel = refract(-normalize(uJellySun), vec3(0.0, 1.0, 0.0), 0.75);
+  vec3 sunHere = exp(-JELLY_KD * max(-vJellyWorld.y, 0.0)) * vec3(1.0, 0.97, 0.9);
+  // Forward scattering through the bell toward the viewer (Henyey-Greenstein, g = 0.7):
+  // a glow when the jelly is seen against the light, strongest in the milky parts.
+  float cosine = dot(jellyWorldView, sunTravel);
+  float hg = (1.0 - 0.49) / pow(1.49 - 1.4 * cosine, 1.5) / 12.566;
+  float scatter = clamp(opacity, 0.0, 1.0) * 0.5 + 0.15;
+  // Light passing through from the sunlit side (wrapped, for the thin tissue).
+  float through = clamp(0.5 - 0.5 * dot(jellyNormal, -normalize((viewMatrix * vec4(sunTravel, 0.0)).xyz)), 0.0, 1.0);
+  vec3 glow = sunHere * (hg * 0.9 + through * 0.05) * scatter;
+  // The milky rim scatters the blue ambient light around it.
+  glow += water * rim * 0.35;
+  gl_FragColor.rgb = mix(water, gl_FragColor.rgb, clamp(opacity, 0.0, 0.95)) + glow * (vJellyKind > 2.5 ? jellyFringe : 1.0);
 }`,
   };
 }
@@ -200,9 +360,13 @@ export const createMoonJellies: GameSystemFactory = async environment => {
   const jellyAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
   jellyAttribute.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute("aJelly", jellyAttribute);
-  const uniforms = { uJellyTime: { value: 0 }, uJellySun: { value: environment.sunDirection.clone().normalize() } };
+  const uniforms = {
+    uJellyTime: { value: 0 },
+    uJellySun: { value: environment.sunDirection.clone().normalize() },
+    uJellyTentacles: { value: quality === "high" ? 220 : quality === "medium" ? 160 : 110 },
+  };
   const material = applyDeform(
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(0.86, 0.9, 0.95), emissive: new THREE.Color(0.35, 0.45, 0.6), emissiveIntensity: 0.12, roughness: 0.25, metalness: 0, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(0.86, 0.9, 0.95), emissive: new THREE.Color(0.35, 0.45, 0.6), emissiveIntensity: 0.1, roughness: 0.18, metalness: 0, side: THREE.DoubleSide }),
     jellyDeform(uniforms),
     environment.patchMaterial,
   );
@@ -228,7 +392,8 @@ export const createMoonJellies: GameSystemFactory = async environment => {
       ay: 1,
       az: (random() - 0.5) * 0.4,
       phase: random(),
-      rate: PULSE_HZ * (0.9 + random() * 0.2),
+      // Measured adults pulse at 0.24 ± 0.11 Hz.
+      rate: PULSE_HZ * (0.75 + random() * 0.5),
       size: 0.75 + random() * 0.55,
       swarm: swarmIndex,
       heading: random() * TAU,
